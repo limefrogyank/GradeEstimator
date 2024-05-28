@@ -7,6 +7,19 @@ Demo:  https://limefrogyank.github.io/GradeEstimator/pointsBased.html
 
 Demo: https://limefrogyank.github.io/GradeEstimator/percentBased.html
 
+# Why use it?
+
+1.  This is better than a shared spreadsheet (MS Excel or Google Sheets) because students do NOT need to sign in to their accounts.  Also, spreadsheets like this are shared so you need to make one for each student or else they'll end up seeing each other's grades.  Asking them to make a copy is mostly futile.
+
+2.  This calculator will save the scores they enter into their browser.  If they reopen the page at a later date, the scores will return.  If they are using a public computer, they can instantly wipe out the save file with a button at the top of the table.  However, this data contains no personally identifying information, so if they forget, no big deal.
+
+3.  This estimator will copy just fine when you copy your course shell for next term.
+
+4.  It should be fully accessible.
+
+
+# To Use
+
 To edit the categories and weights/points, open the HTML file you want to use and scroll down to `const rowDataEditable`.  (Below is the points-based version, but percent-based will be similar.)
 
 ```
