@@ -1,7 +1,7 @@
 # GradeEstimator
 Easy to use webpage grade estimator for students to use.  Good for posting to LMS like D2L or Blackboard.
 
-These tools depend on AG-Grid Community edition and use a JSDelivr link.  If you prefer, you can download a copy of AG-Grid and store it on your server directly.
+These tools depend on [AG-Grid Community edition](https://www.ag-grid.com/community/) and use a JSDelivr link.  If you prefer, you can download a copy of AG-Grid and store it on your server directly.
 
 Demo:  https://limefrogyank.github.io/GradeEstimator/pointsBased.html
 
