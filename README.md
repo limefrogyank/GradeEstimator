@@ -30,6 +30,6 @@ Points-based:
 Percentage-based:
 `category: "Some Name with quotes", weight: some percentage without percent symbol`
 
-Points-based maxPoints values must add up to the total points you’re using in the class to calculate a final grade correctly. Percentage-based weight values must add up to 100. Mis-spellings will likely cause errors.
+Points-based `maxPoints` values must add up to the total points you’re using in the class to calculate a final grade correctly. Percentage-based `weight` values must add up to 100. Mis-spellings will likely cause errors.
 
-_OPTIONAL_:   You can change the default grade (when a student hasn’t entered anything yet) to something other than the max points/percentage using the defaultPercentage variable that is just below what you just edited.  I have set it to full credit by default.
+_OPTIONAL_:   You can change the default grade (when a student hasn’t entered anything yet) to something other than the max points/percentage using the `defaultPercentage` variable that is just below what you just edited.  I have set it to full credit by default.
