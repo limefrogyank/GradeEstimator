@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Includes all JS & CSS for the JavaScript Data Grid -->
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
+</head>
+
+<body>
+    <h1>Calculate your class grade</h1>
+    <p>Click on a percentage cell to change the value to one that fits your results.</p>
+    <em>Warning: Values you enter are stored in the browser for your convenience.
+        On public computers, you can reset stored data by pressing this button.
+        <button onclick="resetData()">Reset data</button>
+    </em>
+    <div id="myGrid" class="ag-theme-quartz"></div>
+    <p>
+        <script>
+            // Created by Lee McPherson, May 2024 (lee.mcpherson@pcc.edu, leemcpherson@hotmail.com)
+
+            // check browser for stored data from last page access
+            let pageName = location.href.replaceAll('/','').replaceAll(':','');
+            const savedDataName = 'percentageScores' + pageName;            
+            let savedData;
+            try {
+                savedData = window.localStorage.getItem(savedDataName);
+                if (savedData) {
+                    savedData = JSON.parse(savedData);
+                    // should be json object: category=>percentage
+                }
+            } catch {
+
+            }
+
+            // Edit categories and weights HERE!  
+            const rowDataEditable = [
+                { category: "Exam 1", weight: 20 },
+                { category: "Exam 2", weight: 20 },
+                { category: "Final Exam", weight: 20 },
+                { category: "Lab", weight: 20 },
+                { category: "Written HW", weight: 6 },
+                { category: "Mastering Chemistry HW", weight: 6 },
+                { category: "Quizzes", weight: 8 }
+            ];
+            // Edit default percentage score for categories here.
+            const defaultPercentage = 100;
+
+            // Grid Options: Contains all of the data grid configurations
+            const gridOptions = {
+                domLayout: 'autoHeight',
+                stopEditingWhenCellsLoseFocus: true,
+                getRowHeight: p => {
+                    if (p.node.rowPinned && p.node.rowPinned === "bottom") {
+                        return 70;
+                    }
+                },
+                getRowStyle: p => {
+                    if (p.node.rowPinned && p.node.rowPinned === "bottom") {
+                        return { fontSize: 'x-large', background: '#F4F4F4', paddingTop: '10px' };
+                    }
+                },
+                // Row Data: The data to be displayed.
+                rowData: rowDataEditable.map(x => {
+
+                    if (savedData && savedData[x.category]) {
+                        x.percentageScore = savedData[x.category];
+                    } else {
+                        if (!x.percentageScore) {
+                            x.percentageScore = defaultPercentage;
+                        }
+                    }
+                    return x;
+                }),
+                // Column Definitions: Defines the columns to be displayed.
+                columnDefs: [
+                    { field: "category" },
+                    {
+                        field: "percentageScore",
+                        editable: true,
+                        singleClickEdit: true,
+                        cellStyle: p => {
+                            if (p.data.category === 'Class Grade') {
+                                return { display: 'none' };
+                            }
+                            return { border: '2px black solid' }
+                        },
+                        onCellValueChanged: (e) => {
+                            // Write to browser first.
+                            try {
+                                let data = {};
+                                grid.forEachNode(node => {
+                                    data[node.data.category] = node.data.percentageScore;
+                                });
+                                localStorage.setItem(savedDataName, JSON.stringify(data));
+                            } catch { }
+                            // Calculate aggregation row
+                            generatePinnedBottomData();
+                        }
+                    },
+                    {
+                        field: "weight",
+                        cellStyle: p => {
+                            if (p.data.category === 'Class Grade') {
+                                return { display: 'none' };
+                            }
+                            return;
+                        },
+                    },
+                    {
+                        field: "points",
+                        valueGetter: p => {
+                            if (p.data.category === 'Class Grade') {
+                                return p.data.points;
+                            }
+                            return p.data.percentageScore / 100 * p.data.weight;
+                        },
+                        valueFormatter: p => {
+                            if (p.data.category === 'Class Grade') {
+                                return p.value.toFixed(1) + '%';
+                            } else {
+                                return (p.value) ? p.value.toFixed(1) : '1';
+                            }
+                        }
+                    }
+                ]
+            };
+
+            // Your Javascript code to create the data grid
+            const myGridElement = document.querySelector('#myGrid');
+            const grid = agGrid.createGrid(myGridElement, gridOptions);
+
+            // Function that calculates the point scores for each row, then aggregates them
+            function calculatePinnedBottomData(target) {
+                grid.forEachNodeAfterFilter((rowNode) => {
+
+                    if (rowNode.data['percentageScore'])
+                        target['points'] += rowNode.data['percentageScore'] / 100 * rowNode.data['weight'];
+                });
+
+                return target;
+            };
+
+            // Function that creates the last pinned row that displays aggregate results
+            function generatePinnedBottomData() {
+                // generate a row-data with null values
+                let result = { category: 'Class Grade' };
+                result['points'] = 0;
+                const t = calculatePinnedBottomData(result);
+                t['category'] = 'Class Grade';
+                grid.setGridOption('pinnedBottomRowData', [t]);
+            }
+
+            generatePinnedBottomData();
+
+            function resetData() {
+                try {
+                    localStorage.clear();
+                } catch {
+
+                }
+                location.reload();
+            }
+
+        </script>
+    </p>
+</body>
+
+</html>
