@@ -22,13 +22,13 @@ const rowDataEditable = [
 ];
 
 ```
-Edit this list to match your grading scheme.  Inside the square brackets “[ ]”, line must start and end with curly braces “{ }” and each line must end with a comma “,”.  You don’t need a comma for the last line.  Inside the curly braces you must have:
+Edit this list to match your grading scheme.  Inside the square brackets "[ ]", line must start and end with curly braces "{ }" and each line must end with a comma ",".  You don’t need a comma for the last line.  Inside the curly braces you must have:
 
 Points-based:
-`category: “Some Name with quotes”, maxPoints: some number `
+`category: "Some Name with quotes", maxPoints: some number `
 
 Percentage-based:
-`category: “Some Name with quotes”, weight: some percentage without percent symbol`
+`category: "Some Name with quotes", weight: some percentage without percent symbol`
 
 Points-based maxPoints values must add up to the total points you’re using in the class to calculate a final grade correctly. Percentage-based weight values must add up to 100. Mis-spellings will likely cause errors.
 
