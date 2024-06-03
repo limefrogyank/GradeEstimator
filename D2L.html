@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <!-- Includes all JS & CSS for the JavaScript Data Grid -->
+    <script src="https://cdn.jsdelivr.net/npm/ag-grid-community/dist/ag-grid-community.min.js"></script>
+</head>
+
+<body>
+    <h1>Calculate your class grade</h1>
+    <p>Click on a percentage cell to change the value to one that fits your results.</p>
+    <em>Warning: Values you enter are stored in the browser for your convenience.
+        On public computers, you can reset stored data by pressing this button.
+        <button onclick="resetData()">Reset data</button>
+    </em>
+    <div id="myGrid" class="ag-theme-quartz"></div>
+    <p>
+        <script>
+            // Created by Lee McPherson, May 2024 (lee.mcpherson@pcc.edu, leemcpherson@hotmail.com)
+
+            // Column Definitions: Defines the columns to be displayed.
+            const columnDefs = [
+                { field: "category" },
+                { 
+                    field: "items",
+                    cellRenderer : p => {
+                        const eDiv = document.createElement('div');
+                        eDiv.innerText = p.data.value;
+                        console.log(p);
+                        if (p.data.gradeItems > 1){
+                            const button = document.createElement('button');
+                            button.innerText = "CLICK ME";
+                            eDiv.appendChild(button);
+                        } 
+                        return eDiv;
+                        
+                    }
+                },
+                {
+                    field: "value",
+                    editable: true,
+                    singleClickEdit: true,
+                    cellStyle: p => {
+                        if (p.data.category === 'Class Grade') {
+                            return { display: 'none' };
+                        }
+                        return { border: '2px black solid' }
+                    },
+                    onCellValueChanged: (e) => {
+                        // Write to browser first.
+                        try {
+                            let data = {};
+                            grid.forEachNode(node => {
+                                data[node.data.category] = node.data.value;
+                            });
+                            localStorage.setItem(savedDataName, JSON.stringify(data));
+                        } catch { }
+                        // Calculate aggregation row
+                        generatePinnedBottomData();
+                    }
+                },
+                {
+                    field: "weight",
+                    cellStyle: p => {
+                        if (p.data.category === 'Class Grade') {
+                            return { display: 'none' };
+                        }
+                        return;
+                    },
+                },
+                {
+                    field: "points",
+                    valueGetter: p => {
+                        if (p.data.category === 'Class Grade') {
+                            return p.data.points;
+                        }
+                        return p.data.percentageScore / 100 * p.data.weight;
+                    },
+                    valueFormatter: p => {
+                        if (p.data.category === 'Class Grade') {
+                            return p.value.toFixed(1) + '%';
+                        } else {
+                            return (p.value) ? p.value.toFixed(1) : '1';
+                        }
+                    }
+                }
+            ];
+
+            async function getAPIDataAsync() {
+
+                // D2L specific:  try and get token then download grades from API
+                let tokenData = await window.localStorage.getItem('D2L.Fetch.Tokens');
+                if (tokenData) {
+                    tokenData = JSON.parse(tokenData);
+                    const token = tokenData["*:*:*"]["access_token"];
+                    console.log(token);
+
+                    // get org unit
+                    const hrefsplit = window.parent.location.href.split('/');
+                    const orgUnitId = hrefsplit[hrefsplit.indexOf('content') + 1];
+                    console.log(orgUnitId);
+
+                    const fetchOptions = {
+                        method: 'GET',
+                        withCredentials: true,
+                        credentials: 'include',
+                        headers: {
+                            'Authorization': 'Bearer ' + token,
+                            'Content-Type': 'application/json'
+                        }
+                    };
+
+                    const responseSetup = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/setup/");
+                    const setup = await responseSetup.json();
+                    const isWeighted = setup.GradingSystem === "Weighted";
+                    const isPoints = setup.GradingSystem === "Points";
+
+                    const responseScheme = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/schemes/");
+                    const scheme = await responseScheme.json();
+                    console.log(scheme);
+
+                    const responseCategories = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/categories/", fetchOptions);
+                    const categories = await responseCategories.json();
+                    console.log(categories);
+
+                    // // NOT NEEDED, categories above already has data
+                    // for(const category of categories){
+                    //     const responseCategory = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/categories/" + category.Id, fetchOptions);
+                    //     const categoryData = await responseCategory.json();
+                    //     console.log(categoryData);
+                    // }
+
+                    const responseMyGrades = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/values/myGradeValues/", fetchOptions);
+                    const myGrades = await responseMyGrades.json();
+                    console.log(myGrades);
+
+                    // for (const item of categories) {
+                    //     for (const grade of item.Grades) {
+                    //         const responseGrade = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/" + grade.Id + "/values/", fetchOptions);
+                    //         const gradeData = await responseGrade.json();
+                    //         console.log(gradeData);
+                    //     }
+                    // }
+
+                    // check browser for stored data from last page access
+                    let pageName = location.href.replaceAll('/', '').replaceAll(':', '');
+                    const savedDataName = 'gradeData' + pageName;
+                    let savedData;
+                    try {
+                        savedData = window.localStorage.getItem(savedDataName);
+                        if (savedData) {
+                            savedData = JSON.parse(savedData);
+                            // should be json object: category=>value
+                        }
+                    } catch {
+
+                    }
+
+                    
+                    // Edit default percentage score for categories here.
+                    const defaultPercentage = 100;
+
+                    let rowData = categories.map((v, i, a) => {
+                        let value = defaultPercentage;
+                        let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
+                        if (grade){
+                            value = grade.PointsNumerator / grade.PointsDenominator * 100;
+                        }
+                        return { category: v.Name, weight: v.Weight, gradeItems: v.Grades.length, maxPoints: v.MaxPoints, value: value };
+                    });
+                    rowData = rowData.filter(x => x.weight != 0);
+
+
+  
+
+                    // Grid Options: Contains all of the data grid configurations
+                    const gridOptions = {
+                        domLayout: 'autoHeight',
+                        stopEditingWhenCellsLoseFocus: true,
+                        getRowHeight: p => {
+                            if (p.node.rowPinned && p.node.rowPinned === "bottom") {
+                                return 70;
+                            }
+                        },
+                        getRowStyle: p => {
+                            if (p.node.rowPinned && p.node.rowPinned === "bottom") {
+                                return { fontSize: 'x-large', background: '#F4F4F4', paddingTop: '10px' };
+                            }
+                        },
+                        // Row Data: The data to be displayed.
+                        rowData: rowData,
+                        // rowData: rowDataEditable.map(x => {
+
+                        //     if (savedData && savedData[x.category]) {
+                        //         x.percentageScore = savedData[x.category];
+                        //     } else {
+                        //         if (!x.percentageScore) {
+                        //             x.percentageScore = defaultPercentage;
+                        //         }
+                        //     }
+                        //     return x;
+                        // }),
+
+                        columnDefs: columnDefs
+                    };
+
+
+                    // Your Javascript code to create the data grid
+                    const myGridElement = document.querySelector('#myGrid');
+                    const grid = agGrid.createGrid(myGridElement, gridOptions);
+
+                    generatePinnedBottomData(grid);
+                    //grid.setGridOption('rowData', newData);
+                }
+            }
+
+
+
+
+            // Function that calculates the point scores for each row, then aggregates them
+            function calculatePinnedBottomData(grid, target) {
+                grid.forEachNodeAfterFilter((rowNode) => {
+
+                    if (rowNode.data['value'])
+                        target['points'] += rowNode.data['value'] / 100 * rowNode.data['weight'];
+                });
+
+                return target;
+            };
+
+            // Function that creates the last pinned row that displays aggregate results
+            function generatePinnedBottomData(grid) {
+                // generate a row-data with null values
+                let result = { category: 'Class Grade' };
+                result['points'] = 0;
+                const t = calculatePinnedBottomData(grid, result);
+                t['category'] = 'Class Grade';
+                grid.setGridOption('pinnedBottomRowData', [t]);
+            }
+
+
+
+
+            getAPIDataAsync();
+
+            function resetData() {
+                try {
+                    localStorage.clear();
+                } catch {
+
+                }
+                location.reload();
+            }
+
+        </script>
+    </p>
+</body>
+
+</html>
