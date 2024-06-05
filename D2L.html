@@ -67,24 +67,49 @@
                         if (p.data.name === 'Class Grade') {
                             return { display: 'none' };
                         }
-                        return { border: '2px black solid' }
+                        return { background: "yellow" };
+                        //return { border: '2px black solid' }
                     },
                     onCellValueChanged: (e) => {
                         // Write to browser first.
-                        try {
-                            let data = {};
-                            e.api.forEachNode(node => {
-                                data[node.data.category] = node.data.value;
-                            });
-                            localStorage.setItem(savedDataName, JSON.stringify(data));
-                        } catch { }
-                        // Calculate aggregation row
-                        generatePinnedBottomData(e.api);
+                        if (e.data.parent != null) {
+                            let parent = e.data.parent;
+                            let distributionType = e.data.parent.categoryItem.WeightDistributionType;
+                            if (distributionType == 1) {
+                                // evenly distributed items can have high or lowest dropped
+                                const numHighestToDrop = e.data.parent.categoryItem.NumberOfHighestToDrop;
+                                const numLowestToDrop = e.data.parent.categoryItem.NumberOfLowestToDrop;
+                                const highest = [];
+                                const lowest = [];
+                                let total = 0;
+                                for (const item of parent.rowData) {
+                                    total += item.value;
+                                }
+
+                            } else if (distributionType == 0) {
+                                // weighted individually
+                            } else {
+                                // regular by points
+                                let total = 0;
+                                for (const item of parent.rowData) {
+                                    total += item.value;
+                                }
+                                console.log(e);
+                                parent.value = total;
+                            }
+
+
+                            generatePinnedBottomData(parentGrid);
+                        } else {
+                            // Calculate aggregation row
+                            generatePinnedBottomData(e.api);
+                        }
                     }
                 },
                 {
                     // remove this field if category & isWeighted
                     field: "maxValue",
+                    width: 150,
                     cellStyle: p => {
                         if (p.data.category === 'Class Grade') {
                             return { display: 'none' };
@@ -94,26 +119,44 @@
                 },
                 {
                     field: "weight",
+                    width: 100,
                     cellStyle: p => {
                         if (p.data.category === 'Class Grade') {
                             return { display: 'none' };
                         }
                         return;
                     },
-                },
-                {
-                    field: "weightedValue",
                     valueGetter: p => {
-                        if (p.data.category === 'Class Grade') {
-                            return p.data.points;
-                        }
-                        return p.data.percentageScore / 100 * p.data.weight;
+                        if (p.data.gradeItem){
+                            return p.data.gradeItem.WeightedDenominator;
+                        } else
+                            return "";
                     },
                     valueFormatter: p => {
                         if (p.data.category === 'Class Grade') {
                             return p.value.toFixed(1) + '%';
                         } else {
-                            return (p.value) ? p.value.toFixed(1) : '1';
+                            return Math.round(p.value*10)/10 + '%';
+                        }
+                    }
+                },
+                {
+                    field: "weightedValue",
+                    width: 200,
+                    valueGetter: p => {
+                        if (p.data.category === 'Class Grade') {
+                            return p.data.points;
+                        }
+                        if (p.data.gradeItem){
+                            return p.data.gradeItem.WeightedNumerator;
+                        } else
+                            return "";
+                    },
+                    valueFormatter: p => {
+                        if (p.data.category === 'Class Grade') {
+                            return p.value.toFixed(1) + '%';
+                        } else {
+                            return Math.round(p.value*10)/10;
                         }
                     }
                 }
@@ -165,15 +208,16 @@
                         if (p.data.name === 'Class Grade') {
                             return {};
                         }
-                        return { border: '2px black solid' }
+                        return { background: "yellow" };
+                        //return { border: '2px black solid' }
                     },
                     onCellValueChanged: (e) => {
                         // check if cell is inside a category... if so, change category total/percentage
                         console.log(e);
-                        if (e.data.parent != null){
+                        if (e.data.parent != null) {
                             let parent = e.data.parent;
                             let total = 0;
-                            for (const item of parent.rowData){
+                            for (const item of parent.rowData) {
                                 total += item.value;
                             }
                             parent.value = total;
@@ -182,19 +226,9 @@
                             // Calculate aggregation row
                             generatePinnedBottomData(e.api);
                         }
-                        // // Write to browser first.
-                        // try {
-                        //     let data = {};
-                        //     e.api.forEachNode(node => {
-                        //         data[node.data.category] = node.data.value;
-                        //     });
-                        //     localStorage.setItem(savedDataName, JSON.stringify(data));
-                        // } catch { }
-                        
                     }
                 },
                 {
-                    // remove this field if category & isWeighted
                     field: "maxValue"
                 },
                 {
@@ -215,11 +249,23 @@
             async function getAPIDataAsync() {
 
                 // D2L specific:  try and get token then download grades from API
+                let token = null;
                 let tokenData = await window.localStorage.getItem('D2L.Fetch.Tokens');
                 if (tokenData) {
                     tokenData = JSON.parse(tokenData);
-                    const token = tokenData["*:*:*"]["access_token"];
-                    console.log(token);
+                    console.log(tokenData);
+                    let tokenDate = new Date(tokenData["*:*:*"]["expires_at"] * 1000);
+                    console.log(tokenDate);
+                    console.log(Date.now());
+                    if (tokenDate > Date.now()) {
+                        token = tokenData["*:*:*"]["access_token"];
+                    }
+                }
+                if (token) {
+                    //tokenData = JSON.parse(tokenData);
+                    //console.log(tokenData);
+                    //const token = tokenData["*:*:*"]["access_token"];
+                    //console.log(token);
 
                     // get org unit
                     const hrefsplit = window.parent.location.href.split('/');
@@ -281,10 +327,15 @@
                         if (grade) {
                             value = grade.PointsNumerator;
                         }
-                        return { name: v.Name, weight: v.Weight, rowData: null, gradeItems: [], maxValue: v.MaxPoints, value: value, isExpanded: false, parent: null };
+                        return { name: v.Name, weight: v.Weight, rowData: null, gradeItem: grade, gradeItems: [], maxValue: v.MaxPoints, value: value, isExpanded: false, parent: null };
                     });
+
                     let rowDataCategories = categories.filter(v => v.Grades && v.Grades.filter(x => x.GradeType == 'Numeric').length > 0).map((v, i, a) => {
-                        let result = { name: v.Name, weight: v.Weight, rowData: null, gradeItems: v.Grades, maxValue: v.MaxPoints, value: v.MaxPoints, isExpanded: false, parent: null };
+                        let result = {
+                            name: v.Name, weight: v.Weight, rowData: null,
+                            gradeItems: v.Grades, maxValue: v.MaxPoints, value: v.MaxPoints, isExpanded: false, parent: null,
+                            categoryItem: v
+                        };
                         //let value = v.MaxPoints;
                         let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
                         if (grade) {
@@ -298,7 +349,7 @@
                                 value = grade.PointsNumerator;
                                 //value = grade.PointsNumerator / grade.PointsDenominator * 100;
                             }
-                            return { name: v2.Name, weight: v2.Weight, gradeItems: [], maxValue: v2.MaxPoints, value: value, isExpanded: false, parent: result };
+                            return { name: v2.Name, weight: v2.Weight, gradeItem: grade, gradeItems: [], maxValue: v2.MaxPoints, value: value, isExpanded: false, parent: result };
                         });
                         subRowData = subRowData.filter(x => x.weight != 0); // filter out anything that has no weight (will work for points)
                         result.rowData = subRowData;
@@ -331,19 +382,12 @@
                             fullWidthCellRenderer: fullWidthCellRenderer,
                             // Row Data: The data to be displayed.
                             rowData: rowData,
-                            // rowData: rowDataEditable.map(x => {
 
-                            //     if (savedData && savedData[x.category]) {
-                            //         x.percentageScore = savedData[x.category];
-                            //     } else {
-                            //         if (!x.percentageScore) {
-                            //             x.percentageScore = defaultPercentage;
-                            //         }
-                            //     }
-                            //     return x;
-                            // }),
+                            columnDefs: isWeighted ? columnDefsWeighted : columnDefsPoints,
 
-                            columnDefs: isWeighted ? columnDefsWeighted : columnDefsPoints
+                            defaultColDef: {
+                                suppressKeyboardEvent: suppressKeyboardEvent,
+                            }
                         };
                         return gridOptions;
                     }
@@ -394,16 +438,20 @@
 
                     generatePinnedBottomData(parentGrid);
                     //grid.setGridOption('rowData', newData);
+                } else {
+                    const myGridElement = document.querySelector('#myGrid');
+                    myGridElement.innerHTML = `<h2>There was a problem accessing the token that allows access to D2L services.  It may have expired or was erased.
+                        Try navigating back to the class home page and reloading.</h2>`;
                 }
             }
 
 
-            // Function that calculates the point scores for each row, then aggregates them
+            // Function that aggregates the values from each row
             function calculatePinnedBottomData(grid, target) {
                 grid.forEachNodeAfterFilter((rowNode) => {
                     if (rowNode.data.value) {
                         if (rowNode.data.isExpanded) {
-                            for (const row of rowNode.data.rowData){
+                            for (const row of rowNode.data.rowData) {
                                 target.value += row.value;
                                 target.maxValue += row.maxValue;
                             }
@@ -436,6 +484,107 @@
                 }
                 location.reload();
             }
+
+
+            // This next section handles keyboard navigation to the custom content inside the cells.
+            // i.e. the button that "expands" the cell to show items inside a category
+            //      and the new grid inside the category cell 
+
+            function getAllFocusableElementsOf(el) {
+                return Array.from(
+                    el.querySelectorAll(
+                        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+                    ),).filter((focusableEl) => {
+                        return focusableEl.tabIndex !== -1;
+                    });
+            }
+
+            function getEventPath(event) {
+                const path = [];
+                let currentTarget = event.target;
+
+                while (currentTarget) {
+                    path.push(currentTarget);
+                    currentTarget = currentTarget.parentElement;
+                }
+
+                return path;
+            }
+
+            const GRID_CELL_CLASSNAME = "ag-cell";
+
+            function suppressKeyboardEvent({ event }) {
+                const { key, shiftKey } = event;
+                const path = getEventPath(event);
+                const isTabForward = key === "Tab" && shiftKey === false;
+                const isTabBackward = key === "Tab" && shiftKey === true;
+
+                let suppressEvent = false;
+
+                // Handle cell children tabbing
+                if (isTabForward || isTabBackward) {
+                    const eGridCell = path.find((el) => {
+                        if (el.classList === undefined) return false;
+                        return el.classList.contains(GRID_CELL_CLASSNAME);
+                    });
+
+                    if (!eGridCell) {
+                        return suppressEvent;
+                    }
+
+                    const focusableChildrenElements = getAllFocusableElementsOf(eGridCell);
+                    const lastCellChildEl =
+                        focusableChildrenElements[focusableChildrenElements.length - 1];
+                    const firstCellChildEl = focusableChildrenElements[0];
+
+                    // Suppress keyboard event if tabbing forward within the cell and the current focused element is not the last child
+                    if (focusableChildrenElements.length === 0) {
+                        return false;
+                    }
+
+                    const currentIndex = focusableChildrenElements.indexOf(document.activeElement);
+
+                    if (isTabForward) {
+                        const isLastChildFocused =
+                            lastCellChildEl && document.activeElement === lastCellChildEl;
+
+                        if (!isLastChildFocused) {
+                            suppressEvent = true;
+                            if (currentIndex !== -1 || document.activeElement === eGridCell) {
+                                event.preventDefault();
+                                focusableChildrenElements[currentIndex + 1].focus();
+                            }
+                        }
+                    }
+                    // Suppress keyboard event if tabbing backwards within the cell, and the current focused element is not the first child
+                    else {
+                        const cellHasFocusedChildren =
+                            eGridCell.contains(document.activeElement) &&
+                            eGridCell !== document.activeElement;
+
+                        // Manually set focus to the last child element if cell doesn't have focused children
+                        if (!cellHasFocusedChildren) {
+                            lastCellChildEl.focus();
+                            // Cancel keyboard press, so that it doesn't focus on the last child and then pass through the keyboard press to
+                            // move to the 2nd last child element
+                            event.preventDefault();
+                        }
+
+                        const isFirstChildFocused =
+                            firstCellChildEl && document.activeElement === firstCellChildEl;
+                        if (!isFirstChildFocused) {
+                            suppressEvent = true;
+                            if (currentIndex !== -1 || document.activeElement === eGridCell) {
+                                event.preventDefault();
+                                focusableChildrenElements[currentIndex - 1].focus();
+                            }
+                        }
+                    }
+                }
+
+                return suppressEvent;
+            }
+
 
             // start it all!
             getAPIDataAsync();
