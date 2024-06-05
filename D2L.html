@@ -19,29 +19,52 @@
             // Created by Lee McPherson, May 2024 (lee.mcpherson@pcc.edu, leemcpherson@hotmail.com)
 
             // Column Definitions: Defines the columns to be displayed.
-            const columnDefs = [
-                { field: "category" },
-                { 
-                    field: "items",
-                    cellRenderer : p => {
-                        const eDiv = document.createElement('div');
-                        eDiv.innerText = p.data.value;
-                        console.log(p);
-                        if (p.data.gradeItems > 1){
+
+            let parentGrid = null;
+
+            const columnDefsWeighted = [
+                {
+                    field: "name",
+                    cellRenderer: p => {
+                        const div = document.createElement('div');
+                        div.style = "display: inline-flex;align-items: center;";
+
+                        const title = document.createElement('span');
+
+                        if (p.data.gradeItems && p.data.gradeItems.length > 0) {
+                            //if (p.data.gradeItems.length > 1) {
+
                             const button = document.createElement('button');
-                            button.innerText = "CLICK ME";
-                            eDiv.appendChild(button);
-                        } 
-                        return eDiv;
-                        
+                            button.classList.add('ag-button');
+                            button.classList.add('ag-floating-filter-button-button');
+                            button.style = "display:flex;";
+                            const innerspan = document.createElement('span');
+                            innerspan.classList.add('ag-icon');
+                            innerspan.classList.add('ag-icon-tree-closed');
+                            button.appendChild(innerspan);
+                            //button.innerHTML = "&#xf130";
+                            button.onclick = x => {
+                                p.data.isExpanded = !p.data.isExpanded;
+                                p.api.resetRowHeights();
+                                p.api.redrawRows({ rowNodes: [p.node] });
+                            };
+                            div.appendChild(button);
+
+                            title.innerHTML = 'Category: ' + p.data.name + ' (' + p.data.gradeItems.length + ')';
+                        } else {
+                            title.innerHTML = p.data.name;
+                        }
+                        div.appendChild(title);
+                        return div;
                     }
+
                 },
                 {
                     field: "value",
                     editable: true,
                     singleClickEdit: true,
                     cellStyle: p => {
-                        if (p.data.category === 'Class Grade') {
+                        if (p.data.name === 'Class Grade') {
                             return { display: 'none' };
                         }
                         return { border: '2px black solid' }
@@ -50,14 +73,24 @@
                         // Write to browser first.
                         try {
                             let data = {};
-                            grid.forEachNode(node => {
+                            e.api.forEachNode(node => {
                                 data[node.data.category] = node.data.value;
                             });
                             localStorage.setItem(savedDataName, JSON.stringify(data));
                         } catch { }
                         // Calculate aggregation row
-                        generatePinnedBottomData();
+                        generatePinnedBottomData(e.api);
                     }
+                },
+                {
+                    // remove this field if category & isWeighted
+                    field: "maxValue",
+                    cellStyle: p => {
+                        if (p.data.category === 'Class Grade') {
+                            return { display: 'none' };
+                        }
+                        return;
+                    },
                 },
                 {
                     field: "weight",
@@ -69,7 +102,7 @@
                     },
                 },
                 {
-                    field: "points",
+                    field: "weightedValue",
                     valueGetter: p => {
                         if (p.data.category === 'Class Grade') {
                             return p.data.points;
@@ -85,6 +118,99 @@
                     }
                 }
             ];
+
+            const columnDefsPoints = [
+                {
+                    field: "name",
+                    cellRenderer: p => {
+                        const div = document.createElement('div');
+                        div.style = "display: inline-flex;align-items: center;";
+
+                        const title = document.createElement('span');
+
+                        if (p.data.gradeItems && p.data.gradeItems.length > 0) {
+                            //if (p.data.gradeItems.length > 1) {
+
+                            const button = document.createElement('button');
+                            button.classList.add('ag-button');
+                            button.classList.add('ag-floating-filter-button-button');
+                            button.style = "display:flex;";
+                            const innerspan = document.createElement('span');
+                            innerspan.classList.add('ag-icon');
+                            innerspan.classList.add('ag-icon-tree-closed');
+                            button.appendChild(innerspan);
+                            //button.innerHTML = "&#xf130";
+                            button.onclick = x => {
+                                p.data.isExpanded = !p.data.isExpanded;
+                                p.api.resetRowHeights();
+                                p.api.redrawRows({ rowNodes: [p.node] });
+                                generatePinnedBottomData(parentGrid);
+                            };
+                            div.appendChild(button);
+
+                            title.innerHTML = 'Category: ' + p.data.name + ' (' + p.data.gradeItems.length + ')';
+                        } else {
+                            title.innerHTML = p.data.name;
+                        }
+                        div.appendChild(title);
+                        return div;
+                    }
+
+                },
+                {
+                    field: "value",
+                    editable: p => p.data.name !== 'Class Grade',
+                    singleClickEdit: true,
+                    cellStyle: p => {
+                        if (p.data.name === 'Class Grade') {
+                            return {};
+                        }
+                        return { border: '2px black solid' }
+                    },
+                    onCellValueChanged: (e) => {
+                        // check if cell is inside a category... if so, change category total/percentage
+                        console.log(e);
+                        if (e.data.parent != null){
+                            let parent = e.data.parent;
+                            let total = 0;
+                            for (const item of parent.rowData){
+                                total += item.value;
+                            }
+                            parent.value = total;
+                            generatePinnedBottomData(parentGrid);
+                        } else {
+                            // Calculate aggregation row
+                            generatePinnedBottomData(e.api);
+                        }
+                        // // Write to browser first.
+                        // try {
+                        //     let data = {};
+                        //     e.api.forEachNode(node => {
+                        //         data[node.data.category] = node.data.value;
+                        //     });
+                        //     localStorage.setItem(savedDataName, JSON.stringify(data));
+                        // } catch { }
+                        
+                    }
+                },
+                {
+                    // remove this field if category & isWeighted
+                    field: "maxValue"
+                },
+                {
+                    field: "percentage",
+                    valueGetter: p => {
+                        if (p.data.category === 'Class Grade') {
+                            return p.data.points;
+                        }
+                        return p.data.value / p.data.maxValue * 100;
+                    },
+                    valueFormatter: p => {
+                        return p.value.toFixed(1) + '%';
+                    }
+                }
+            ];
+
 
             async function getAPIDataAsync() {
 
@@ -119,28 +245,17 @@
                     const scheme = await responseScheme.json();
                     console.log(scheme);
 
+                    const responseGradeObjects = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/");
+                    const gradeObjects = await responseGradeObjects.json();
+                    console.log(gradeObjects);
+
                     const responseCategories = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/categories/", fetchOptions);
                     const categories = await responseCategories.json();
                     console.log(categories);
 
-                    // // NOT NEEDED, categories above already has data
-                    // for(const category of categories){
-                    //     const responseCategory = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/categories/" + category.Id, fetchOptions);
-                    //     const categoryData = await responseCategory.json();
-                    //     console.log(categoryData);
-                    // }
-
                     const responseMyGrades = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/values/myGradeValues/", fetchOptions);
                     const myGrades = await responseMyGrades.json();
                     console.log(myGrades);
-
-                    // for (const item of categories) {
-                    //     for (const grade of item.Grades) {
-                    //         const responseGrade = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/" + grade.Id + "/values/", fetchOptions);
-                    //         const gradeData = await responseGrade.json();
-                    //         console.log(gradeData);
-                    //     }
-                    // }
 
                     // check browser for stored data from last page access
                     let pageName = location.href.replaceAll('/', '').replaceAll(':', '');
@@ -156,60 +271,128 @@
 
                     }
 
-                    
+
                     // Edit default percentage score for categories here.
                     const defaultPercentage = 100;
 
-                    let rowData = categories.map((v, i, a) => {
-                        let value = defaultPercentage;
+                    let rowData = gradeObjects.filter(v => v.CategoryId == 0 && v.Weight != 0 && v.GradeType == 'Numeric').map(v => {
+                        let value = v.MaxPoints;
                         let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
-                        if (grade){
-                            value = grade.PointsNumerator / grade.PointsDenominator * 100;
+                        if (grade) {
+                            value = grade.PointsNumerator;
                         }
-                        return { category: v.Name, weight: v.Weight, gradeItems: v.Grades.length, maxPoints: v.MaxPoints, value: value };
+                        return { name: v.Name, weight: v.Weight, rowData: null, gradeItems: [], maxValue: v.MaxPoints, value: value, isExpanded: false, parent: null };
                     });
-                    rowData = rowData.filter(x => x.weight != 0);
-
-
-  
-
-                    // Grid Options: Contains all of the data grid configurations
-                    const gridOptions = {
-                        domLayout: 'autoHeight',
-                        stopEditingWhenCellsLoseFocus: true,
-                        getRowHeight: p => {
-                            if (p.node.rowPinned && p.node.rowPinned === "bottom") {
-                                return 70;
+                    let rowDataCategories = categories.filter(v => v.Grades && v.Grades.filter(x => x.GradeType == 'Numeric').length > 0).map((v, i, a) => {
+                        let result = { name: v.Name, weight: v.Weight, rowData: null, gradeItems: v.Grades, maxValue: v.MaxPoints, value: v.MaxPoints, isExpanded: false, parent: null };
+                        //let value = v.MaxPoints;
+                        let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
+                        if (grade) {
+                            result.value = v.PointsNumerator;
+                        }
+                        // get items inside category and pre-format them
+                        let subRowData = v.Grades.filter(v2 => v2.GradeType == "Numeric").map((v2, i2, a2) => {
+                            let value = v2.MaxPoints;
+                            let grade = myGrades.find(x => x.GradeObjectIdentifier == v2.Id);
+                            if (grade) {
+                                value = grade.PointsNumerator;
+                                //value = grade.PointsNumerator / grade.PointsDenominator * 100;
                             }
-                        },
-                        getRowStyle: p => {
-                            if (p.node.rowPinned && p.node.rowPinned === "bottom") {
-                                return { fontSize: 'x-large', background: '#F4F4F4', paddingTop: '10px' };
-                            }
-                        },
-                        // Row Data: The data to be displayed.
-                        rowData: rowData,
-                        // rowData: rowDataEditable.map(x => {
+                            return { name: v2.Name, weight: v2.Weight, gradeItems: [], maxValue: v2.MaxPoints, value: value, isExpanded: false, parent: result };
+                        });
+                        subRowData = subRowData.filter(x => x.weight != 0); // filter out anything that has no weight (will work for points)
+                        result.rowData = subRowData;
+                        return result;
+                    });
+                    rowData = rowData.concat(rowDataCategories);
 
-                        //     if (savedData && savedData[x.category]) {
-                        //         x.percentageScore = savedData[x.category];
-                        //     } else {
-                        //         if (!x.percentageScore) {
-                        //             x.percentageScore = defaultPercentage;
-                        //         }
-                        //     }
-                        //     return x;
-                        // }),
 
-                        columnDefs: columnDefs
-                    };
+                    function createGridOptions(rowData) {
+                        // Grid Options: Contains all of the data grid configurations
+                        const gridOptions = {
+                            domLayout: 'autoHeight',
+                            stopEditingWhenCellsLoseFocus: true,
+                            getRowHeight: p => {
+                                if (p.node.rowPinned && p.node.rowPinned === "bottom") {
+                                    return 70;
+                                }
+                                if (p.data.isExpanded) {  //title + header + cells + final border
+                                    return 39 + 48 + (p.data.gradeItems.filter(v => v.GradeType == "Numeric").length * 42) + 30;
+                                }
+                            },
+                            getRowStyle: p => {
+                                if (p.node.rowPinned && p.node.rowPinned === "bottom") {
+                                    return { fontSize: 'x-large', background: '#F4F4F4', paddingTop: '10px' };
+                                }
+                            },
+                            isFullWidthRow: p => {
+                                return p.rowNode.data.isExpanded;
+                            },
+                            fullWidthCellRenderer: fullWidthCellRenderer,
+                            // Row Data: The data to be displayed.
+                            rowData: rowData,
+                            // rowData: rowDataEditable.map(x => {
 
+                            //     if (savedData && savedData[x.category]) {
+                            //         x.percentageScore = savedData[x.category];
+                            //     } else {
+                            //         if (!x.percentageScore) {
+                            //             x.percentageScore = defaultPercentage;
+                            //         }
+                            //     }
+                            //     return x;
+                            // }),
+
+                            columnDefs: isWeighted ? columnDefsWeighted : columnDefsPoints
+                        };
+                        return gridOptions;
+                    }
+
+                    function fullWidthCellRenderer(p) {
+                        //create new grid inside with sub data
+                        const div = document.createElement('div');
+                        const titleDiv = document.createElement('div');
+                        titleDiv.style = "display: inline-flex;align-items: center;";
+                        div.appendChild(titleDiv);
+
+                        const button = document.createElement('button');
+                        button.classList.add('ag-button');
+                        button.classList.add('ag-floating-filter-button-button');
+                        button.style = "display:flex;margin-left:10px;";
+                        const innerspan = document.createElement('span');
+                        innerspan.classList.add('ag-icon');
+                        innerspan.classList.add('ag-icon-tree-open');
+                        button.appendChild(innerspan);
+                        //button.innerHTML = "&#xf130";
+                        button.onclick = x => {
+                            p.data.isExpanded = !p.data.isExpanded;
+                            p.api.resetRowHeights();
+                            p.api.redrawRows({ rowNodes: [p.node] });
+                            generatePinnedBottomData(parentGrid);
+                        };
+                        titleDiv.appendChild(button);
+
+                        const title = document.createElement('span');
+                        //title.classList.add('ag-cell');
+                        title.style = "margin: 10px;";
+                        title.innerHTML = "Category: " + p.data.name + "";
+                        titleDiv.appendChild(title);
+
+                        const subGridDiv = document.createElement('div');
+                        subGridDiv.style = 'margin-left: 30px';
+                        subGridDiv.classList.add('ag-theme-quartz');
+                        div.appendChild(subGridDiv);
+                        const subgrid = agGrid.createGrid(subGridDiv, createGridOptions(p.data.rowData));
+
+                        return div;
+                    }
 
                     // Your Javascript code to create the data grid
                     const myGridElement = document.querySelector('#myGrid');
-                    const grid = agGrid.createGrid(myGridElement, gridOptions);
+                    parentGrid = agGrid.createGrid(myGridElement, createGridOptions(rowData));
+                    console.log(parentGrid);
 
-                    generatePinnedBottomData(grid);
+                    generatePinnedBottomData(parentGrid);
                     //grid.setGridOption('rowData', newData);
                 }
             }
@@ -220,9 +403,17 @@
             // Function that calculates the point scores for each row, then aggregates them
             function calculatePinnedBottomData(grid, target) {
                 grid.forEachNodeAfterFilter((rowNode) => {
-
-                    if (rowNode.data['value'])
-                        target['points'] += rowNode.data['value'] / 100 * rowNode.data['weight'];
+                    if (rowNode.data.value) {
+                        if (rowNode.data.isExpanded) {
+                            for (const row of rowNode.data.rowData){
+                                target.value += row.value;
+                                target.maxValue += row.maxValue;
+                            }
+                        } else {
+                            target.value += rowNode.data.value;
+                            target.maxValue += rowNode.data.maxValue;
+                        }
+                    }
                 });
 
                 return target;
@@ -231,17 +422,13 @@
             // Function that creates the last pinned row that displays aggregate results
             function generatePinnedBottomData(grid) {
                 // generate a row-data with null values
-                let result = { category: 'Class Grade' };
-                result['points'] = 0;
+                let result = { name: 'Class Grade' };
+                result['value'] = 0;
+                result['maxValue'] = 0;
                 const t = calculatePinnedBottomData(grid, result);
-                t['category'] = 'Class Grade';
+                //t['name'] = 'Class Grade';
                 grid.setGridOption('pinnedBottomRowData', [t]);
             }
-
-
-
-
-            getAPIDataAsync();
 
             function resetData() {
                 try {
@@ -251,6 +438,9 @@
                 }
                 location.reload();
             }
+
+            // start it all!
+            getAPIDataAsync();
 
         </script>
     </p>
