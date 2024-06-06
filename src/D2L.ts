@@ -1,0 +1,602 @@
+import { GridOptions, ColDef, createGrid, GridApi, CellStyle } from 'ag-grid-community';
+
+// Created by Lee McPherson, May 2024 (lee.mcpherson@pcc.edu, leemcpherson@hotmail.com)
+
+// Column Definitions: Defines the columns to be displayed.
+
+let parentGrid: GridApi | undefined;
+
+const columnDefsWeighted: ColDef[] = [
+    {
+        field: "name",
+        cellRenderer: p => {
+            const div = document.createElement('div');
+            div.style.cssText = "display: inline-flex;align-items: center;";
+
+            const title = document.createElement('span');
+
+            if (p.data.gradeItems && p.data.gradeItems.length > 0) {
+                //if (p.data.gradeItems.length > 1) {
+
+                const button = document.createElement('button');
+                button.classList.add('ag-button');
+                button.classList.add('ag-floating-filter-button-button');
+                button.style.cssText = "display:flex;";
+                const innerspan = document.createElement('span');
+                innerspan.classList.add('ag-icon');
+                innerspan.classList.add('ag-icon-tree-closed');
+                button.appendChild(innerspan);
+                //button.innerHTML = "&#xf130";
+                button.onclick = x => {
+                    p.data.isExpanded = !p.data.isExpanded;
+                    p.api.resetRowHeights();
+                    p.api.redrawRows({ rowNodes: [p.node] });
+                };
+                div.appendChild(button);
+
+                title.innerHTML = 'Category: ' + p.data.name + ' (' + p.data.gradeItems.length + ')';
+            } else {
+                title.innerHTML = p.data.name;
+            }
+            div.appendChild(title);
+            return div;
+        }
+
+    },
+    {
+        field: "value",
+        editable: true,
+        singleClickEdit: true,
+        cellStyle: p => {
+            if (p.data.name === 'Class Grade') {
+                return { display: 'none' } as CellStyle;
+            }
+            return { backgroundColor: "yellow" } as CellStyle;
+            
+            //return { border: '2px black solid' }
+        },
+        onCellValueChanged: (e) => {
+            // Write to browser first.
+            if (e.data.parent != null) {
+                let parent = e.data.parent;
+                let distributionType = e.data.parent.categoryItem.WeightDistributionType;
+                if (distributionType == 1) {
+                    console.log('same weight each');
+                    console.log(e);
+                    console.log(JSON.stringify(e.data.gradeObject));
+                    console.log(JSON.stringify(e.data.gradeValue));
+                    // evenly distributed items can have high or lowest dropped
+                    const numHighestToDrop = e.data.parent.categoryItem.NumberOfHighestToDrop;
+                    const numLowestToDrop = e.data.parent.categoryItem.NumberOfLowestToDrop;
+                    const highest = [];
+                    const lowest = [];
+                    let total = 0;
+                    for (const item of parent.rowData) {
+                        total += item.value;
+                    }
+
+                } else if (distributionType == 0) {
+                    // weighted individually
+                    console.log('weighted individually');
+                    console.log(e);
+                    console.log(JSON.stringify(e.data.gradeObject));
+                    console.log(JSON.stringify(e.data.gradeValue));
+
+
+
+                } else {
+                    // regular by points
+                    console.log('regular by points');
+                    console.log(e);
+                    console.log(JSON.stringify(e.data.gradeObject));
+                    console.log(JSON.stringify(e.data.gradeValue));
+
+
+                    let total = 0;
+                    for (const item of parent.rowData) {
+                        total += item.value;
+                    }
+
+                    parent.value = total;
+                }
+
+
+                generatePinnedBottomData(parentGrid);
+            } else {
+                // Calculate aggregation row
+                generatePinnedBottomData(e.api);
+            }
+        }
+    },
+    {
+        // remove this field if category & isWeighted
+        field: "maxValue",
+        width: 150,
+        cellStyle: p => {
+            if (p.data.category === 'Class Grade') {
+                return { display: 'none' };
+            }
+            return;
+        },
+    },
+    {
+        field: "weight",
+        width: 100,
+        cellStyle: p => {
+            if (p.data.category === 'Class Grade') {
+                return { display: 'none' };
+            }
+            return;
+        },
+        valueGetter: p => {
+            if (p.data.gradeObject) {
+                return p.data.gradeObject.Weight;
+                //return p.data.gradeObject.WeightedDenominator;
+            } else
+                return "";
+        },
+        valueFormatter: p => {
+            if (p.data.category === 'Class Grade') {
+                return p.value.toFixed(1) + '%';
+            } else {
+                return Math.round(p.value * 10) / 10 + '%';
+            }
+        }
+    },
+    {
+        field: "weightedValue",
+        width: 200,
+        valueGetter: p => {
+            if (p.data.category === 'Class Grade') {
+                return p.data.points;
+            }
+            if (p.data.gradeObject) {
+                return p.data.gradeObject.WeightedNumerator;
+            } else
+                return "";
+        },
+        valueFormatter: p => {
+            if (p.data.category === 'Class Grade') {
+                return p.value.toFixed(1) + '%';
+            } else {
+                return (Math.round(p.value * 10) / 10).toString();
+            }
+        }
+    }
+];
+
+const columnDefsPoints: ColDef[] = [
+    {
+        field: "name",
+        cellRenderer: p => {
+            const div = document.createElement('div');
+            div.style.cssText = "display: inline-flex;align-items: center;";
+
+            const title = document.createElement('span');
+
+            if (p.data.gradeItems && p.data.gradeItems.length > 0) {
+                //if (p.data.gradeItems.length > 1) {
+
+                const button = document.createElement('button');
+                button.classList.add('ag-button');
+                button.classList.add('ag-floating-filter-button-button');
+                button.style.cssText = "display:flex;";
+                const innerspan = document.createElement('span');
+                innerspan.classList.add('ag-icon');
+                innerspan.classList.add('ag-icon-tree-closed');
+                button.appendChild(innerspan);
+                //button.innerHTML = "&#xf130";
+                button.onclick = x => {
+                    p.data.isExpanded = !p.data.isExpanded;
+                    p.api.resetRowHeights();
+                    p.api.redrawRows({ rowNodes: [p.node] });
+                    generatePinnedBottomData(parentGrid);
+                };
+                div.appendChild(button);
+
+                title.innerHTML = 'Category: ' + p.data.name + ' (' + p.data.gradeItems.length + ')';
+            } else {
+                title.innerHTML = p.data.name;
+            }
+            div.appendChild(title);
+            return div;
+        }
+
+    },
+    {
+        field: "value",
+        editable: p => p.data.name !== 'Class Grade',
+        singleClickEdit: true,
+        cellStyle: p => {
+            if (p.data.name === 'Class Grade') {
+                return null;
+            }
+            return { background: "yellow" };
+            //return { border: '2px black solid' }
+        },
+        onCellValueChanged: (e) => {
+            // check if cell is inside a category... if so, change category total/percentage
+            console.log(e);
+            if (e.data.parent != null) {
+                let parent = e.data.parent;
+                let total = 0;
+                for (const item of parent.rowData) {
+                    total += item.value;
+                }
+                parent.value = total;
+                generatePinnedBottomData(parentGrid);
+            } else {
+                // Calculate aggregation row
+                generatePinnedBottomData(e.api);
+            }
+        }
+    },
+    {
+        field: "maxValue"
+    },
+    {
+        field: "percentage",
+        valueGetter: p => {
+            if (p.data.category === 'Class Grade') {
+                return p.data.points;
+            }
+            return p.data.value / p.data.maxValue * 100;
+        },
+        valueFormatter: p => {
+            return p.value.toFixed(1) + '%';
+        }
+    }
+];
+
+
+interface D2LStorage {
+    "*:*:*": Token;
+}
+interface Token {
+    expires_at: number;
+    access_token: string;
+}
+
+
+
+
+export async function getAPIDataAsync() {
+
+    // D2L specific:  try and get token then download grades from API
+    let token: string | undefined;
+    let tokenData: D2LStorage;
+    let tokenRaw = await window.localStorage.getItem('D2L.Fetch.Tokens');
+    if (tokenRaw && tokenRaw !== null) {
+        tokenData = JSON.parse(tokenRaw);
+        console.log(tokenData);
+        let tokenDate = new Date(tokenData!["*:*:*"]["expires_at"] * 1000);
+        console.log(tokenDate);
+        console.log(Date.now());
+        if (tokenDate.getTime() > Date.now()) {
+            token = tokenData!["*:*:*"]["access_token"];
+        }
+    }
+    if (token) {
+        //tokenData = JSON.parse(tokenData);
+        //console.log(tokenData);
+        //const token = tokenData["*:*:*"]["access_token"];
+        //console.log(token);
+
+        // get org unit
+        const hrefsplit = window.parent.location.href.split('/');
+        const orgUnitId = hrefsplit[hrefsplit.indexOf('content') + 1];
+        console.log(orgUnitId);
+
+        const fetchOptions: RequestInit = {
+            method: 'GET',
+            //withCredentials: true,
+            credentials: 'include',
+            headers: {
+                'Authorization': 'Bearer ' + token,
+                'Content-Type': 'application/json'
+            }
+        };
+
+        const responseSetup = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/setup/");
+        const setup = await responseSetup.json();
+        const isWeighted = setup.GradingSystem === "Weighted";
+        const isPoints = setup.GradingSystem === "Points";
+
+        const responseScheme = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/schemes/");
+        const scheme = await responseScheme.json();
+        console.log(scheme);
+
+        const responseGradeObjects = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/");
+        const gradeObjects = await responseGradeObjects.json();
+        console.log(gradeObjects);
+
+        const responseCategories = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/categories/", fetchOptions);
+        const categories = await responseCategories.json();
+        console.log(categories);
+
+        const responseMyGrades = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/values/myGradeValues/", fetchOptions);
+        const myGrades = await responseMyGrades.json();
+        console.log(myGrades);
+
+        // check browser for stored data from last page access
+        let pageName = location.href.replaceAll('/', '').replaceAll(':', '');
+        const savedDataName = 'gradeData' + pageName;
+        let savedData;
+        try {
+            savedData = window.localStorage.getItem(savedDataName);
+            if (savedData) {
+                savedData = JSON.parse(savedData);
+                // should be json object: category=>value
+            }
+        } catch {
+
+        }
+
+
+        // Edit default percentage score for categories here.
+        const defaultPercentage = 100;
+
+        let rowData = gradeObjects.filter(v => v.CategoryId == 0 && v.Weight != 0 && v.GradeType == 'Numeric').map(v => {
+            let value = v.MaxPoints;
+            let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
+            if (grade) {
+                value = grade.PointsNumerator;
+            }
+            return { name: v.Name, weight: v.Weight, rowData: null, gradeObject: v, gradeValue: grade, gradeItems: [], maxValue: v.MaxPoints, value: value, isExpanded: false, parent: null };
+        });
+
+        let rowDataCategories = categories.filter(v => v.Grades && v.Grades.filter(x => x.GradeType == 'Numeric').length > 0).map((v, i, a) => {
+            let result = {
+                name: v.Name, weight: v.Weight, rowData: null,
+                gradeItems: v.Grades, maxValue: v.MaxPoints, value: v.MaxPoints, isExpanded: false, parent: null,
+                categoryItem: v
+            };
+            //let value = v.MaxPoints;
+            let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
+            if (grade) {
+                result.value = v.PointsNumerator;
+            }
+            // get items inside category and pre-format them
+            let subRowData = v.Grades.filter(v2 => v2.GradeType == "Numeric").map((v2, i2, a2) => {
+                let value = v2.MaxPoints;
+                let grade = myGrades.find(x => x.GradeObjectIdentifier == v2.Id);
+                if (grade) {
+                    value = grade.PointsNumerator;
+                    //value = grade.PointsNumerator / grade.PointsDenominator * 100;
+                }
+                return { name: v2.Name, weight: v2.Weight, gradeObject: v2, gradeValue: grade, gradeItems: [], maxValue: v2.MaxPoints, value: value, isExpanded: false, parent: result };
+            });
+            subRowData = subRowData.filter(x => x.weight != 0); // filter out anything that has no weight (will work for points)
+            result.rowData = subRowData;
+            return result;
+        });
+        rowData = rowData.concat(rowDataCategories);
+
+
+        function createGridOptions(rowData): GridOptions {
+            // Grid Options: Contains all of the data grid configurations
+            const gridOptions: GridOptions = {
+                domLayout: 'autoHeight',
+                stopEditingWhenCellsLoseFocus: true,
+                getRowHeight: p => {
+                    if (p.node.rowPinned && p.node.rowPinned === "bottom") {
+                        return 70;
+                    }
+                    if (p.data.isExpanded) {  //title + header + cells + final border
+                        return 39 + 48 + (p.data.gradeItems.filter(v => v.GradeType == "Numeric").length * 42) + 30;
+                    }
+                },
+                getRowStyle: p => {
+                    if (p.node.rowPinned && p.node.rowPinned === "bottom") {
+                        return { fontSize: 'x-large', background: '#F4F4F4', paddingTop: '10px' };
+                    }
+                },
+                isFullWidthRow: p => {
+                    return p.rowNode.data.isExpanded;
+                },
+                fullWidthCellRenderer: fullWidthCellRenderer,
+                // Row Data: The data to be displayed.
+                rowData: rowData,
+
+                columnDefs: isWeighted ? columnDefsWeighted : columnDefsPoints,
+
+                defaultColDef: {
+                    suppressKeyboardEvent: suppressKeyboardEvent,
+                }
+            };
+            return gridOptions;
+        }
+
+        function fullWidthCellRenderer(p) {
+            //create new grid inside with sub data
+            const div = document.createElement('div');
+            const titleDiv = document.createElement('div');
+            titleDiv.style.cssText = "display: inline-flex;align-items: center;";
+            div.appendChild(titleDiv);
+
+            const button = document.createElement('button');
+            button.classList.add('ag-button');
+            button.classList.add('ag-floating-filter-button-button');
+            button.style.cssText = "display:flex;margin-left:10px;";
+            const innerspan = document.createElement('span');
+            innerspan.classList.add('ag-icon');
+            innerspan.classList.add('ag-icon-tree-open');
+            button.appendChild(innerspan);
+            //button.innerHTML = "&#xf130";
+            button.onclick = x => {
+                p.data.isExpanded = !p.data.isExpanded;
+                p.api.resetRowHeights();
+                p.api.redrawRows({ rowNodes: [p.node] });
+                generatePinnedBottomData(parentGrid);
+            };
+            titleDiv.appendChild(button);
+
+            const title = document.createElement('span');
+            //title.classList.add('ag-cell');
+            title.style.cssText = "margin: 10px;";
+            title.innerHTML = "Category: " + p.data.name + "";
+            titleDiv.appendChild(title);
+
+            const subGridDiv = document.createElement('div');
+            subGridDiv.style.cssText = 'margin-left: 30px';
+            subGridDiv.classList.add('ag-theme-quartz');
+            div.appendChild(subGridDiv);
+            const subgrid = createGrid(subGridDiv, createGridOptions(p.data.rowData));
+
+            return div;
+        }
+
+        // Your Javascript code to create the data grid
+        const myGridElement = document.querySelector('#myGrid') as HTMLElement;
+        parentGrid = createGrid(myGridElement, createGridOptions(rowData));
+        console.log(parentGrid);
+
+        generatePinnedBottomData(parentGrid);
+        //grid.setGridOption('rowData', newData);
+    } else {
+        const myGridElement = document.querySelector('#myGrid') as HTMLElement;
+        myGridElement.innerHTML = `<h2>There was a problem accessing the token that allows access to D2L services.  It may have expired or was erased.
+                        Try navigating back to the class home page and reloading.</h2>`;
+    }
+}
+
+
+// Function that aggregates the values from each row
+function calculatePinnedBottomData(grid, target) {
+    grid.forEachNodeAfterFilter((rowNode) => {
+        if (rowNode.data.value) {
+            if (rowNode.data.isExpanded) {
+                for (const row of rowNode.data.rowData) {
+                    target.value += row.value;
+                    target.maxValue += row.maxValue;
+                }
+            } else {
+                target.value += rowNode.data.value;
+                target.maxValue += rowNode.data.maxValue;
+            }
+        }
+    });
+
+    return target;
+};
+
+// Function that creates the last pinned row that displays aggregate results
+function generatePinnedBottomData(grid) {
+    // generate a row-data with null values
+    let result = { name: 'Class Grade' };
+    result['value'] = 0;
+    result['maxValue'] = 0;
+    const t = calculatePinnedBottomData(grid, result);
+    //t['name'] = 'Class Grade';
+    grid.setGridOption('pinnedBottomRowData', [t]);
+}
+
+function resetData() {
+    try {
+        localStorage.clear();
+    } catch {
+
+    }
+    location.reload();
+}
+
+
+// This next section handles keyboard navigation to the custom content inside the cells.
+// i.e. the button that "expands" the cell to show items inside a category
+//      and the new grid inside the category cell 
+
+function getAllFocusableElementsOf(el) {
+    return Array.from<HTMLElement>(
+        el.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        ),).filter((focusableEl) => {
+            return focusableEl.tabIndex !== -1;
+        });
+}
+
+function getEventPath(event) {
+    const path: HTMLElement[] = [];
+    let currentTarget = event.target as HTMLElement | null;
+
+    while (currentTarget) {
+        path.push(currentTarget);
+        currentTarget = currentTarget.parentElement;
+    }
+
+    return path;
+}
+
+const GRID_CELL_CLASSNAME = "ag-cell";
+
+function suppressKeyboardEvent({ event }) {
+    const { key, shiftKey } = event;
+    const path = getEventPath(event);
+    const isTabForward = key === "Tab" && shiftKey === false;
+    const isTabBackward = key === "Tab" && shiftKey === true;
+
+    let suppressEvent = false;
+
+    // Handle cell children tabbing
+    if (isTabForward || isTabBackward) {
+        const eGridCell = path.find((el) => {
+            if (el.classList === undefined) return false;
+            return el.classList.contains(GRID_CELL_CLASSNAME);
+        });
+
+        if (!eGridCell) {
+            return suppressEvent;
+        }
+
+        const focusableChildrenElements = getAllFocusableElementsOf(eGridCell);
+        const lastCellChildEl =
+            focusableChildrenElements[focusableChildrenElements.length - 1];
+        const firstCellChildEl = focusableChildrenElements[0];
+
+        // Suppress keyboard event if tabbing forward within the cell and the current focused element is not the last child
+        if (focusableChildrenElements.length === 0) {
+            return false;
+        }
+
+        const currentIndex = focusableChildrenElements.indexOf(document.activeElement as HTMLElement);
+
+        if (isTabForward) {
+            const isLastChildFocused =
+                lastCellChildEl && document.activeElement === lastCellChildEl;
+
+            if (!isLastChildFocused) {
+                suppressEvent = true;
+                if (currentIndex !== -1 || document.activeElement === eGridCell) {
+                    event.preventDefault();
+                    focusableChildrenElements[currentIndex + 1].focus();
+                }
+            }
+        }
+        // Suppress keyboard event if tabbing backwards within the cell, and the current focused element is not the first child
+        else {
+            const cellHasFocusedChildren =
+                eGridCell.contains(document.activeElement) &&
+                eGridCell !== document.activeElement;
+
+            // Manually set focus to the last child element if cell doesn't have focused children
+            if (!cellHasFocusedChildren) {
+                lastCellChildEl.focus();
+                // Cancel keyboard press, so that it doesn't focus on the last child and then pass through the keyboard press to
+                // move to the 2nd last child element
+                event.preventDefault();
+            }
+
+            const isFirstChildFocused =
+                firstCellChildEl && document.activeElement === firstCellChildEl;
+            if (!isFirstChildFocused) {
+                suppressEvent = true;
+                if (currentIndex !== -1 || document.activeElement === eGridCell) {
+                    event.preventDefault();
+                    focusableChildrenElements[currentIndex - 1].focus();
+                }
+            }
+        }
+    }
+
+    return suppressEvent;
+}
+

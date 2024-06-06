@@ -76,6 +76,10 @@
                             let parent = e.data.parent;
                             let distributionType = e.data.parent.categoryItem.WeightDistributionType;
                             if (distributionType == 1) {
+                                console.log('same weight each');
+                                console.log(e);
+                                console.log(JSON.stringify(e.data.gradeObject));
+                                console.log(JSON.stringify(e.data.gradeValue));
                                 // evenly distributed items can have high or lowest dropped
                                 const numHighestToDrop = e.data.parent.categoryItem.NumberOfHighestToDrop;
                                 const numLowestToDrop = e.data.parent.categoryItem.NumberOfLowestToDrop;
@@ -88,13 +92,26 @@
 
                             } else if (distributionType == 0) {
                                 // weighted individually
+                                console.log('weighted individually');
+                                console.log(e);
+                                console.log(JSON.stringify(e.data.gradeObject));
+                                console.log(JSON.stringify(e.data.gradeValue));
+
+
+
                             } else {
                                 // regular by points
+                                console.log('regular by points');
+                                console.log(e);
+                                console.log(JSON.stringify(e.data.gradeObject));
+                                console.log(JSON.stringify(e.data.gradeValue));
+
+
                                 let total = 0;
                                 for (const item of parent.rowData) {
                                     total += item.value;
                                 }
-                                console.log(e);
+                                
                                 parent.value = total;
                             }
 
@@ -127,8 +144,9 @@
                         return;
                     },
                     valueGetter: p => {
-                        if (p.data.gradeItem){
-                            return p.data.gradeItem.WeightedDenominator;
+                        if (p.data.gradeObject){
+                            return p.data.gradeObject.Weight;
+                            //return p.data.gradeObject.WeightedDenominator;
                         } else
                             return "";
                     },
@@ -147,8 +165,8 @@
                         if (p.data.category === 'Class Grade') {
                             return p.data.points;
                         }
-                        if (p.data.gradeItem){
-                            return p.data.gradeItem.WeightedNumerator;
+                        if (p.data.gradeObject){
+                            return p.data.gradeObject.WeightedNumerator;
                         } else
                             return "";
                     },
@@ -327,7 +345,7 @@
                         if (grade) {
                             value = grade.PointsNumerator;
                         }
-                        return { name: v.Name, weight: v.Weight, rowData: null, gradeItem: grade, gradeItems: [], maxValue: v.MaxPoints, value: value, isExpanded: false, parent: null };
+                        return { name: v.Name, weight: v.Weight, rowData: null,gradeObject: v, gradeValue: grade, gradeItems: [], maxValue: v.MaxPoints, value: value, isExpanded: false, parent: null };
                     });
 
                     let rowDataCategories = categories.filter(v => v.Grades && v.Grades.filter(x => x.GradeType == 'Numeric').length > 0).map((v, i, a) => {
@@ -349,7 +367,7 @@
                                 value = grade.PointsNumerator;
                                 //value = grade.PointsNumerator / grade.PointsDenominator * 100;
                             }
-                            return { name: v2.Name, weight: v2.Weight, gradeItem: grade, gradeItems: [], maxValue: v2.MaxPoints, value: value, isExpanded: false, parent: result };
+                            return { name: v2.Name, weight: v2.Weight, gradeObject: v2 , gradeValue: grade, gradeItems: [], maxValue: v2.MaxPoints, value: value, isExpanded: false, parent: result };
                         });
                         subRowData = subRowData.filter(x => x.weight != 0); // filter out anything that has no weight (will work for points)
                         result.rowData = subRowData;

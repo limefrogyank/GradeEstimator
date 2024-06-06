@@ -1,0 +1,20 @@
+{
+  "name": "gradeestimator",
+  "version": "1.0.0",
+  "description": "Easy to use webpage grade estimator for students to use.  Good for posting to LMS like D2L or Blackboard.",
+  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "build": "rimraf dist && tsc && rollup -c rollup.config.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ag-grid-community": "^31.3.2"
+  },
+  "devDependencies": {
+    "@open-wc/building-rollup": "^3.0.2",
+    "deepmerge": "^4.3.1",
+    "rimraf": "^5.0.7"
+  }
+}
