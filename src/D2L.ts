@@ -1,6 +1,9 @@
-import { GridOptions, ColDef, createGrid, GridApi, CellStyle } from 'ag-grid-community';
-import { GradeObjectType, GradeType, createCategory, createGradeItem } from './interfaces';
-import { sampleCategories, sampleGrades, sampleObjects } from './sampleData';
+import { GridOptions, ColDef, createGrid, GridApi, CellStyle, IRowNode } from 'ag-grid-community';
+import { Category, GradeItem, GradeObjectType, GradeType, WeightDistributionType, createCategory, createGradeItem } from './interfaces';
+import { sampleObjects } from './sampleData/sampleData';
+import { sampleCategories } from './sampleData/sampleCategories';
+import { sampleGrades } from './sampleData/sampleGradeValues';
+import { calculateWeights } from './util';
 
 // Created by Lee McPherson, May 2024 (lee.mcpherson@pcc.edu, leemcpherson@hotmail.com)
 
@@ -8,9 +11,10 @@ import { sampleCategories, sampleGrades, sampleObjects } from './sampleData';
 
 const isDebugging: boolean = true;
 
-let parentGrid: GridApi | undefined;
+let parentGrid: GridApi<GradeItem | Category>;
+let isWeighted: boolean = false;
 
-const columnDefsWeighted: ColDef[] = [
+const columnDefsWeighted: ColDef<GradeItem | Category>[] = [
     {
         field: "name",
         cellRenderer: p => {
@@ -31,7 +35,7 @@ const columnDefsWeighted: ColDef[] = [
                 innerspan.classList.add('ag-icon-tree-closed');
                 button.appendChild(innerspan);
                 //button.innerHTML = "&#xf130";
-                button.onclick = x => {
+                button.onclick = () => {
                     p.data.isExpanded = !p.data.isExpanded;
                     p.api.resetRowHeights();
                     p.api.redrawRows({ rowNodes: [p.node] });
@@ -52,7 +56,7 @@ const columnDefsWeighted: ColDef[] = [
         editable: true,
         singleClickEdit: true,
         cellStyle: p => {
-            if (p.data.name === 'Class Grade') {
+            if (p.data && p.data.name === 'Class Grade') {
                 return { display: 'none' } as CellStyle;
             }
             return { backgroundColor: "yellow" } as CellStyle;
@@ -61,30 +65,16 @@ const columnDefsWeighted: ColDef[] = [
         },
         onCellValueChanged: (e) => {
             // Write to browser first.
-            if (e.data.parent != null) {
-                let parent = e.data.parent;
-                let distributionType = e.data.parent.categoryItem.WeightDistributionType;
+            if (e.data && "parent" in e.data && e.data.parent != null) {
+                const category = e.data.parent;
+                const distributionType = category.weightDistributionType;
                 if (distributionType == 1) {
-                    console.log('same weight each');
-                    console.log(e);
-                    console.log(JSON.stringify(e.data.gradeObject));
-                    console.log(JSON.stringify(e.data.gradeValue));
-                    // evenly distributed items can have high or lowest dropped
-                    const numHighestToDrop = e.data.parent.categoryItem.NumberOfHighestToDrop;
-                    const numLowestToDrop = e.data.parent.categoryItem.NumberOfLowestToDrop;
-                    const highest = [];
-                    const lowest = [];
-                    let total = 0;
-                    for (const item of parent.rowData) {
-                        total += item.value;
-                    }
+                    calculateWeights(category);
 
                 } else if (distributionType == 0) {
                     // weighted individually
                     console.log('weighted individually');
                     console.log(e);
-                    console.log(JSON.stringify(e.data.gradeObject));
-                    console.log(JSON.stringify(e.data.gradeValue));
 
 
 
@@ -92,16 +82,13 @@ const columnDefsWeighted: ColDef[] = [
                     // regular by points
                     console.log('regular by points');
                     console.log(e);
-                    console.log(JSON.stringify(e.data.gradeObject));
-                    console.log(JSON.stringify(e.data.gradeValue));
-
 
                     let total = 0;
-                    for (const item of parent.rowData) {
-                        total += item.value;
+                    for (const item of category.gradeItems) {
+                        total += item.value!;
                     }
 
-                    parent.value = total;
+                    category.value = total;
                 }
 
 
@@ -117,7 +104,7 @@ const columnDefsWeighted: ColDef[] = [
         field: "maxValue",
         width: 150,
         cellStyle: p => {
-            if (p.data.category === 'Class Grade') {
+            if (p.data && p.data.name === 'Class Grade') {
                 return { display: 'none' };
             }
             return;
@@ -127,23 +114,26 @@ const columnDefsWeighted: ColDef[] = [
         field: "weight",
         width: 100,
         cellStyle: p => {
-            if (p.data.category === 'Class Grade') {
+            if (p.data && p.data.name === 'Class Grade') {
                 return { display: 'none' };
             }
             return;
         },
         valueGetter: p => {
-            if (p.data.gradeObject) {
-                return p.data.gradeObject.Weight;
-                //return p.data.gradeObject.WeightedDenominator;
-            } else
-                return "";
+            if (p.data) {
+                return p.data.weight;
+
+            }
         },
         valueFormatter: p => {
-            if (p.data.category === 'Class Grade') {
-                return p.value.toFixed(1) + '%';
+            if (p.data && p.data.name === 'Class Grade' && p.value !== null) {
+                return (p.value ? p.value.toFixed(1) + '%' : '0%');
             } else {
-                return Math.round(p.value * 10) / 10 + '%';
+                if (p.data) {
+                    return (p.value != null ? Math.round(p.value * 10) / 10 + '%' : '0%');
+                } else {
+                    return '0%';
+                }
             }
         }
     },
@@ -151,19 +141,28 @@ const columnDefsWeighted: ColDef[] = [
         field: "weightedValue",
         width: 200,
         valueGetter: p => {
-            if (p.data.category === 'Class Grade') {
-                return p.data.points;
+            if (p.data && p.data.name === 'Class Grade') {
+                console.log('calculating: ');
+                console.log(p.data);
+                let total = p.data.value !== null ? p.data.value/p.data.maxValue*100.0 : 0;
+                console.log(total);
+                return total;
             }
-            if (p.data.gradeObject) {
-                return p.data.gradeObject.WeightedNumerator;
+            if (p.data) {
+                return p.data.weightedValue;
             } else
                 return "";
         },
         valueFormatter: p => {
-            if (p.data.category === 'Class Grade') {
-                return p.value.toFixed(1) + '%';
+            console.log(p);
+            if (p.data && p.data.name === 'Class Grade') {
+                return p.value !== null ? (Math.round(p.value * 10) / 10).toString() + '%' : '0%';
             } else {
-                return (Math.round(p.value * 10) / 10).toString();
+                if (p.data) {
+                    return p.value ? (Math.round(p.value * 10) / 10).toString() : '0%';
+                } else {
+                    return '0%';
+                }
             }
         }
     }
@@ -190,7 +189,7 @@ const columnDefsPoints: ColDef[] = [
                 innerspan.classList.add('ag-icon-tree-closed');
                 button.appendChild(innerspan);
                 //button.innerHTML = "&#xf130";
-                button.onclick = x => {
+                button.onclick = () => {
                     p.data.isExpanded = !p.data.isExpanded;
                     p.api.resetRowHeights();
                     p.api.redrawRows({ rowNodes: [p.node] });
@@ -220,6 +219,7 @@ const columnDefsPoints: ColDef[] = [
         },
         onCellValueChanged: (e) => {
             // check if cell is inside a category... if so, change category total/percentage
+
             console.log(e);
             if (e.data.parent != null) {
                 let parent = e.data.parent;
@@ -273,10 +273,7 @@ export async function getAPIDataAsync() {
     let tokenRaw = await window.localStorage.getItem('D2L.Fetch.Tokens');
     if (tokenRaw && tokenRaw !== null) {
         tokenData = JSON.parse(tokenRaw);
-        console.log(tokenData);
         let tokenDate = new Date(tokenData!["*:*:*"]["expires_at"] * 1000);
-        console.log(tokenDate);
-        console.log(Date.now());
         if (tokenDate.getTime() > Date.now()) {
             token = tokenData!["*:*:*"]["access_token"];
         }
@@ -295,7 +292,6 @@ export async function getAPIDataAsync() {
         // get org unit
         const hrefsplit = window.parent.location.href.split('/');
         const orgUnitId = hrefsplit[hrefsplit.indexOf('content') + 1];
-        console.log(orgUnitId);
 
         const fetchOptions: RequestInit = {
             method: 'GET',
@@ -307,7 +303,7 @@ export async function getAPIDataAsync() {
             }
         };
 
-        let isWeighted = false;
+
         let isPoints = false;
         let scheme;
         let gradeObjects;
@@ -316,9 +312,9 @@ export async function getAPIDataAsync() {
 
         if (isDebugging) {
             isWeighted = true;
-            gradeObjects = JSON.parse(sampleObjects);
-            categories = JSON.parse(sampleCategories);
-            myGrades = JSON.parse(sampleGrades);
+            gradeObjects = sampleObjects;
+            categories = sampleCategories;
+            myGrades = sampleGrades;
 
         } else {
             const responseSetup = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/setup/");
@@ -343,27 +339,9 @@ export async function getAPIDataAsync() {
             console.log(JSON.stringify(myGrades));
         }
 
-        // // check browser for stored data from last page access
-        // let pageName = location.href.replaceAll('/', '').replaceAll(':', '');
-        // const savedDataName = 'gradeData' + pageName;
-        // let savedData;
-        // try {
-        //     savedData = window.localStorage.getItem(savedDataName);
-        //     if (savedData) {
-        //         savedData = JSON.parse(savedData);
-        //         // should be json object: category=>value
-        //     }
-        // } catch {
-
-        // }
-
-
-        // Edit default percentage score for categories here.
-        const defaultPercentage = 100;
-
         let rowData = gradeObjects.filter(v => v.CategoryId == 0 && v.Weight != 0 && v.GradeType == 'Numeric').map(v => {
             const gradeItem = createGradeItem(v, null);
-            gradeItem.value = gradeItem.maxPoints;
+            gradeItem.value = gradeItem.maxValue;
             let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
             if (grade) {
                 if (grade.GradeObjectType == GradeObjectType.Numeric) {
@@ -375,50 +353,34 @@ export async function getAPIDataAsync() {
             return gradeItem;
         });
 
-        let rowDataCategories = categories.filter(v => v.Grades && v.Grades.filter(x => x.GradeType == 'Numeric').length > 0).map((v, i, a) => {
-            // let result = {
-            //     name: v.Name, weight: v.Weight, rowData: null,
-            //     gradeItems: v.Grades, maxValue: v.MaxPoints, value: v.MaxPoints, isExpanded: false, parent: null,
-            //     categoryItem: v
-            // };
+        let rowDataCategories = categories.filter((v: any) => v.Grades && v.Grades.filter((x: any) => x.GradeType == 'Numeric').length > 0).map(v => {
+
             const category = createCategory(v);
-            category.value = v.MaxPoints;
-            let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
+
+            let grade = myGrades.find((x: any) => x.GradeObjectIdentifier == v.Id);
             if (grade) {
                 if (grade.GradeObjectType == GradeObjectType.Category) {
-                    category.value = v.PointsNumerator;
+                    category.value = grade.PointsNumerator;
                 }
             }
-            // get items inside category and pre-format them
+            // get items inside category and add values (that exist) to them
             category.gradeItems.forEach(v2 => {
                 if (v2.gradeType == GradeType.Numeric) {
                     let grade = myGrades.find(x => x.GradeObjectIdentifier == v2.id);
                     if (grade) {
                         if (grade.GradeObjectType == GradeObjectType.Numeric) {
-                            v2.value = v.PointsNumerator;
+                            v2.value = grade.PointsNumerator;
                         }
                     }
                 }
             });
+            // if evenly weighted, must calculate weights
+            calculateWeights(category);
+
             return category;
-            // let subRowData = v.Grades.filter(v2 => v2.GradeType == GradeType.Numeric).map((v2, i2, a2) => {
-            //     let value = v2.MaxPoints;
-            //     let grade = myGrades.find(x => x.GradeObjectIdentifier == v2.Id);
-            //     if (grade) {
-            //         value = grade.PointsNumerator;
-            //         //value = grade.PointsNumerator / grade.PointsDenominator * 100;
-            //     }
-            //     return {
-            //         name: v2.Name, weight: v2.Weight, gradeObject: v2, gradeValue: grade, gradeItems: [],
-            //         maxValue: v2.MaxPoints, value: value, isExpanded: false, parent: result
-            //     };
-            // });
-            // subRowData = subRowData.filter(x => x.weight != 0); // filter out anything that has no weight (will work for points)
-            // result.rowData = subRowData;
-            // return result;
+
         });
         rowData = rowData.concat(rowDataCategories);
-        console.log(rowData);
 
         function createGridOptions(rowData): GridOptions {
             // Grid Options: Contains all of the data grid configurations
@@ -430,7 +392,7 @@ export async function getAPIDataAsync() {
                         return 70;
                     }
                     if (p.data.isExpanded) {  //title + header + cells + final border
-                        return 39 + 48 + (p.data.gradeItems.filter(v => v.GradeType == "Numeric").length * 42) + 30;
+                        return 39 + 48 + (p.data.gradeItems.filter(v => v.gradeType == GradeType.Numeric).length * 42) + 30;
                     }
                 },
                 getRowStyle: p => {
@@ -470,7 +432,7 @@ export async function getAPIDataAsync() {
             innerspan.classList.add('ag-icon-tree-open');
             button.appendChild(innerspan);
             //button.innerHTML = "&#xf130";
-            button.onclick = x => {
+            button.onclick = () => {
                 p.data.isExpanded = !p.data.isExpanded;
                 p.api.resetRowHeights();
                 p.api.redrawRows({ rowNodes: [p.node] });
@@ -488,7 +450,8 @@ export async function getAPIDataAsync() {
             subGridDiv.style.cssText = 'margin-left: 30px';
             subGridDiv.classList.add('ag-theme-quartz');
             div.appendChild(subGridDiv);
-            const subgrid = createGrid(subGridDiv, createGridOptions(p.data.rowData));
+
+            const subGrid = createGrid(subGridDiv, createGridOptions(p.data.gradeItems));
 
             return div;
         }
@@ -496,7 +459,6 @@ export async function getAPIDataAsync() {
         // Your Javascript code to create the data grid
         const myGridElement = document.querySelector('#myGrid') as HTMLElement;
         parentGrid = createGrid(myGridElement, createGridOptions(rowData));
-        console.log(parentGrid);
 
         generatePinnedBottomData(parentGrid);
         //grid.setGridOption('rowData', newData);
@@ -509,44 +471,48 @@ export async function getAPIDataAsync() {
 
 
 // Function that aggregates the values from each row
-function calculatePinnedBottomData(grid, target) {
-    grid.forEachNodeAfterFilter((rowNode) => {
-        if (rowNode.data.value) {
-            if (rowNode.data.isExpanded) {
-                for (const row of rowNode.data.rowData) {
-                    target.value += row.value;
-                    target.maxValue += row.maxValue;
+function calculatePinnedBottomData(grid: GridApi<Category | GradeItem>, target) {
+    grid.forEachNodeAfterFilter((rowNode: IRowNode<Category | GradeItem>) => {
+        if (rowNode.data && rowNode.data.value) {
+
+            if ("isExpanded" in rowNode.data && rowNode.data.isExpanded) {
+                for (const gradeItem of rowNode.data.gradeItems) {
+                    if (isWeighted) {
+                        target.value += gradeItem.weightedValue;
+                        target.maxValue += gradeItem.weight;
+                    } else {
+                        if (gradeItem.value !== null)
+                            target.value += gradeItem.value;
+                        target.maxValue += gradeItem.maxValue;
+                    }
                 }
             } else {
-                target.value += rowNode.data.value;
-                target.maxValue += rowNode.data.maxValue;
+                if (isWeighted) {
+                    target.value += rowNode.data.weightedValue;
+                        target.maxValue += rowNode.data.weight;
+                } else {
+                    if (rowNode.data.value !== null)
+                        target.value += rowNode.data.value;
+                    target.maxValue += rowNode.data.maxValue;
+                }
             }
         }
+        console.log(target);
     });
 
     return target;
 };
 
 // Function that creates the last pinned row that displays aggregate results
-function generatePinnedBottomData(grid) {
+function generatePinnedBottomData(grid: GridApi<Category | GradeItem>) {
     // generate a row-data with null values
-    let result = { name: 'Class Grade' };
+    let result: any = { name: 'Class Grade' };
     result['value'] = 0;
     result['maxValue'] = 0;
     const t = calculatePinnedBottomData(grid, result);
     //t['name'] = 'Class Grade';
     grid.setGridOption('pinnedBottomRowData', [t]);
 }
-
-function resetData() {
-    try {
-        localStorage.clear();
-    } catch {
-
-    }
-    location.reload();
-}
-
 
 // This next section handles keyboard navigation to the custom content inside the cells.
 // i.e. the button that "expands" the cell to show items inside a category

@@ -1,7 +1,7 @@
 export enum WeightDistributionType {
-    ByIndividualWeight = 0,
+    ByPoints = 0,
     EvenlyDistributed = 1,
-    ByPoints = 2
+    ByIndividualWeight = 2
 }
 
 export enum GradeType {
@@ -19,15 +19,17 @@ export interface Category {
     excludeFromFinalGrade: boolean;
     gradeItems: GradeItem[];
     id: number;
-    maxPoints: number;
+    maxValue: number;
     numberOfHighestToDrop: number;
     numberOfLowestToDrop: number;
     weight: number;
     weightDistributionType: WeightDistributionType;
 
     value: number | null;
+    weightedValue: number;
 
     isExpanded: boolean;
+    categoryObject: any;
 }
 
 export interface GradeItem {
@@ -36,13 +38,17 @@ export interface GradeItem {
     gradeType: GradeType;
     id: number;
     weight: number;  // D2L version not used or reliable if ByPoints or EvenlyDistributed 
-    maxPoints: number;
+    maxValue: number;  // not reliable if EvenlyDistributed or ByIndividualWeight
     canExceedMaxPoints: boolean;
     isBonus: boolean;
 
     value: number | null;
+    weightedValue: number;
 
     parent: Category | null;
+    gradeObject: any;
+    gradeValue: any;
+    isDropped:boolean;
 }
 
 export function createCategory(x: any): Category {
@@ -52,13 +58,15 @@ export function createCategory(x: any): Category {
         excludeFromFinalGrade: x.ExcludeFromFinalGrade,
         gradeItems: new Array<GradeItem>(),
         id: x.Id,
-        maxPoints: x.MaxPoints,
+        maxValue: x.WeightDistributionType == WeightDistributionType.ByPoints ? x.MaxPoints : 100,
         numberOfHighestToDrop: x.NumberOfHighestToDrop,
         numberOfLowestToDrop: x.NumberOfLowestToDrop,
         weight: x.Weight,
         weightDistributionType: x.WeightDistributionType,
         isExpanded: false,
-        value: null
+        value: null,
+        weightedValue: 0,
+        categoryObject: null
     }
 
     for (const item of x.Grades) {
@@ -77,12 +85,16 @@ export function createGradeItem(x: any, category: Category | null): GradeItem {
         gradeType: x.GradeType,
         id: x.Id,
         weight: x.Weight,
-        maxPoints: x.MaxPoints,
+        maxValue: x.MaxPoints,
         canExceedMaxPoints: x.CanExceedMaxPoints,
         isBonus: x.IsBonus,
         parent: category,
 
-        value: null
+        value: null,
+        weightedValue: 0,
+        gradeObject: null,
+        gradeValue: null,
+        isDropped:false
     }
 
 }
