@@ -20,7 +20,38 @@ let object = {
     "IsHidden": false
 }
 
+enum WeightDistributionType {
+    ByIndividualWeight = 0,
+    EvenlyDistributed = 1,
+    ByPoints = 2
+}
 
+interface Category {
+    name: string;
+    excludeFromFinalGrade:boolean;
+    gradeItems: GradeItem[];
+    id: number;
+    maxPoints:number;
+    numberOfHighestToDrop: number;
+    numberOfLowestToDrop: number;
+    weight: number;
+    weightDistributionType: WeightDistributionType;
+}
+
+interface GradeItem {
+    name: string;
+    excludeFromFinalGrade:boolean;
+    gradeType: string;
+    id: number;
+    weight: number;
+    maxPoints: number;
+    canExceedMaxPoints: boolean;
+    isBonus: boolean
+}
+
+interface GradeValue extends GradeItem {
+
+}
 
 //by points:
 

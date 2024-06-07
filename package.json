@@ -5,16 +5,23 @@
   "main": "index.ts",
   "type": "module",
   "scripts": {
-    "build": "rimraf dist && tsc && rollup -c rollup.config.js"
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "build2": "tsc && rollup -c rollup.config.js",
+    "build3": "rimraf dist && tsc && rollup -c rollup.config.js"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "ag-grid-community": "^31.3.2"
+    "ag-grid-community": "^31.3.2",
+    "rollup-plugin-import-css": "^3.5.0",
+    "vite": "^5.2.12"
   },
   "devDependencies": {
     "@open-wc/building-rollup": "^3.0.2",
     "deepmerge": "^4.3.1",
-    "rimraf": "^5.0.7"
+    "rimraf": "^5.0.7",
+    "rollup-plugin-dev": "^2.0.4"
   }
 }

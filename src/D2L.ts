@@ -1,8 +1,12 @@
 import { GridOptions, ColDef, createGrid, GridApi, CellStyle } from 'ag-grid-community';
+import { GradeObjectType, GradeType, createCategory, createGradeItem } from './interfaces';
+import { sampleCategories, sampleGrades, sampleObjects } from './sampleData';
 
 // Created by Lee McPherson, May 2024 (lee.mcpherson@pcc.edu, leemcpherson@hotmail.com)
 
 // Column Definitions: Defines the columns to be displayed.
+
+const isDebugging: boolean = true;
 
 let parentGrid: GridApi | undefined;
 
@@ -52,7 +56,7 @@ const columnDefsWeighted: ColDef[] = [
                 return { display: 'none' } as CellStyle;
             }
             return { backgroundColor: "yellow" } as CellStyle;
-            
+
             //return { border: '2px black solid' }
         },
         onCellValueChanged: (e) => {
@@ -263,6 +267,7 @@ interface Token {
 export async function getAPIDataAsync() {
 
     // D2L specific:  try and get token then download grades from API
+
     let token: string | undefined;
     let tokenData: D2LStorage;
     let tokenRaw = await window.localStorage.getItem('D2L.Fetch.Tokens');
@@ -276,6 +281,11 @@ export async function getAPIDataAsync() {
             token = tokenData!["*:*:*"]["access_token"];
         }
     }
+
+    if (isDebugging) {
+        token = "TEST";
+    }
+
     if (token) {
         //tokenData = JSON.parse(tokenData);
         //console.log(tokenData);
@@ -297,81 +307,118 @@ export async function getAPIDataAsync() {
             }
         };
 
-        const responseSetup = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/setup/");
-        const setup = await responseSetup.json();
-        const isWeighted = setup.GradingSystem === "Weighted";
-        const isPoints = setup.GradingSystem === "Points";
+        let isWeighted = false;
+        let isPoints = false;
+        let scheme;
+        let gradeObjects;
+        let categories;
+        let myGrades;
 
-        const responseScheme = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/schemes/");
-        const scheme = await responseScheme.json();
-        console.log(scheme);
+        if (isDebugging) {
+            isWeighted = true;
+            gradeObjects = JSON.parse(sampleObjects);
+            categories = JSON.parse(sampleCategories);
+            myGrades = JSON.parse(sampleGrades);
 
-        const responseGradeObjects = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/");
-        const gradeObjects = await responseGradeObjects.json();
-        console.log(gradeObjects);
+        } else {
+            const responseSetup = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/setup/");
+            const setup = await responseSetup.json();
+            isWeighted = setup.GradingSystem === "Weighted";
+            isPoints = setup.GradingSystem === "Points";
 
-        const responseCategories = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/categories/", fetchOptions);
-        const categories = await responseCategories.json();
-        console.log(categories);
+            const responseScheme = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/schemes/");
+            scheme = await responseScheme.json();
+            console.log(scheme);
 
-        const responseMyGrades = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/values/myGradeValues/", fetchOptions);
-        const myGrades = await responseMyGrades.json();
-        console.log(myGrades);
+            const responseGradeObjects = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/");
+            gradeObjects = await responseGradeObjects.json();
+            console.log(JSON.stringify(gradeObjects));
 
-        // check browser for stored data from last page access
-        let pageName = location.href.replaceAll('/', '').replaceAll(':', '');
-        const savedDataName = 'gradeData' + pageName;
-        let savedData;
-        try {
-            savedData = window.localStorage.getItem(savedDataName);
-            if (savedData) {
-                savedData = JSON.parse(savedData);
-                // should be json object: category=>value
-            }
-        } catch {
+            const responseCategories = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/categories/", fetchOptions);
+            categories = await responseCategories.json();
+            console.log(JSON.stringify(categories));
 
+            const responseMyGrades = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/values/myGradeValues/", fetchOptions);
+            myGrades = await responseMyGrades.json();
+            console.log(JSON.stringify(myGrades));
         }
+
+        // // check browser for stored data from last page access
+        // let pageName = location.href.replaceAll('/', '').replaceAll(':', '');
+        // const savedDataName = 'gradeData' + pageName;
+        // let savedData;
+        // try {
+        //     savedData = window.localStorage.getItem(savedDataName);
+        //     if (savedData) {
+        //         savedData = JSON.parse(savedData);
+        //         // should be json object: category=>value
+        //     }
+        // } catch {
+
+        // }
 
 
         // Edit default percentage score for categories here.
         const defaultPercentage = 100;
 
         let rowData = gradeObjects.filter(v => v.CategoryId == 0 && v.Weight != 0 && v.GradeType == 'Numeric').map(v => {
-            let value = v.MaxPoints;
+            const gradeItem = createGradeItem(v, null);
+            gradeItem.value = gradeItem.maxPoints;
             let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
             if (grade) {
-                value = grade.PointsNumerator;
+                if (grade.GradeObjectType == GradeObjectType.Numeric) {
+                    gradeItem.value = grade.PointsNumerator;
+                }
             }
-            return { name: v.Name, weight: v.Weight, rowData: null, gradeObject: v, gradeValue: grade, gradeItems: [], maxValue: v.MaxPoints, value: value, isExpanded: false, parent: null };
+
+
+            return gradeItem;
         });
 
         let rowDataCategories = categories.filter(v => v.Grades && v.Grades.filter(x => x.GradeType == 'Numeric').length > 0).map((v, i, a) => {
-            let result = {
-                name: v.Name, weight: v.Weight, rowData: null,
-                gradeItems: v.Grades, maxValue: v.MaxPoints, value: v.MaxPoints, isExpanded: false, parent: null,
-                categoryItem: v
-            };
-            //let value = v.MaxPoints;
+            // let result = {
+            //     name: v.Name, weight: v.Weight, rowData: null,
+            //     gradeItems: v.Grades, maxValue: v.MaxPoints, value: v.MaxPoints, isExpanded: false, parent: null,
+            //     categoryItem: v
+            // };
+            const category = createCategory(v);
+            category.value = v.MaxPoints;
             let grade = myGrades.find(x => x.GradeObjectIdentifier == v.Id);
             if (grade) {
-                result.value = v.PointsNumerator;
+                if (grade.GradeObjectType == GradeObjectType.Category) {
+                    category.value = v.PointsNumerator;
+                }
             }
             // get items inside category and pre-format them
-            let subRowData = v.Grades.filter(v2 => v2.GradeType == "Numeric").map((v2, i2, a2) => {
-                let value = v2.MaxPoints;
-                let grade = myGrades.find(x => x.GradeObjectIdentifier == v2.Id);
-                if (grade) {
-                    value = grade.PointsNumerator;
-                    //value = grade.PointsNumerator / grade.PointsDenominator * 100;
+            category.gradeItems.forEach(v2 => {
+                if (v2.gradeType == GradeType.Numeric) {
+                    let grade = myGrades.find(x => x.GradeObjectIdentifier == v2.id);
+                    if (grade) {
+                        if (grade.GradeObjectType == GradeObjectType.Numeric) {
+                            v2.value = v.PointsNumerator;
+                        }
+                    }
                 }
-                return { name: v2.Name, weight: v2.Weight, gradeObject: v2, gradeValue: grade, gradeItems: [], maxValue: v2.MaxPoints, value: value, isExpanded: false, parent: result };
             });
-            subRowData = subRowData.filter(x => x.weight != 0); // filter out anything that has no weight (will work for points)
-            result.rowData = subRowData;
-            return result;
+            return category;
+            // let subRowData = v.Grades.filter(v2 => v2.GradeType == GradeType.Numeric).map((v2, i2, a2) => {
+            //     let value = v2.MaxPoints;
+            //     let grade = myGrades.find(x => x.GradeObjectIdentifier == v2.Id);
+            //     if (grade) {
+            //         value = grade.PointsNumerator;
+            //         //value = grade.PointsNumerator / grade.PointsDenominator * 100;
+            //     }
+            //     return {
+            //         name: v2.Name, weight: v2.Weight, gradeObject: v2, gradeValue: grade, gradeItems: [],
+            //         maxValue: v2.MaxPoints, value: value, isExpanded: false, parent: result
+            //     };
+            // });
+            // subRowData = subRowData.filter(x => x.weight != 0); // filter out anything that has no weight (will work for points)
+            // result.rowData = subRowData;
+            // return result;
         });
         rowData = rowData.concat(rowDataCategories);
-
+        console.log(rowData);
 
         function createGridOptions(rowData): GridOptions {
             // Grid Options: Contains all of the data grid configurations
