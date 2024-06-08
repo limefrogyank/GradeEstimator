@@ -43,6 +43,7 @@ export interface GradeItem {
     isBonus: boolean;
 
     value: number | null;
+    actualWeight: number; //useful for when a value is blank in a category and weights are recalculated.
     weightedValue: number;
 
     parent: Category | null;
@@ -91,6 +92,7 @@ export function createGradeItem(x: any, category: Category | null): GradeItem {
         parent: category,
 
         value: null,
+        actualWeight: x.Weight,
         weightedValue: 0,
         gradeObject: null,
         gradeValue: null,

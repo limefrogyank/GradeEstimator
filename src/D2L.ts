@@ -1,5 +1,5 @@
 import { GridOptions, ColDef, createGrid, GridApi, CellStyle, IRowNode } from 'ag-grid-community';
-import { Category, GradeItem, GradeObjectType, GradeType, WeightDistributionType, createCategory, createGradeItem } from './interfaces';
+import { Category, GradeItem, GradeObjectType, GradeType, createCategory, createGradeItem } from './interfaces';
 import { sampleObjects } from './sampleData/sampleData';
 import { sampleCategories } from './sampleData/sampleCategories';
 import { sampleGrades } from './sampleData/sampleGradeValues';
@@ -37,8 +37,10 @@ const columnDefsWeighted: ColDef<GradeItem | Category>[] = [
                 //button.innerHTML = "&#xf130";
                 button.onclick = () => {
                     p.data.isExpanded = !p.data.isExpanded;
+                    calculateWeights(p.data);
                     p.api.resetRowHeights();
                     p.api.redrawRows({ rowNodes: [p.node] });
+                    generatePinnedBottomData(parentGrid);
                 };
                 div.appendChild(button);
 
@@ -65,37 +67,25 @@ const columnDefsWeighted: ColDef<GradeItem | Category>[] = [
         },
         onCellValueChanged: (e) => {
             // Write to browser first.
-            if (e.data && "parent" in e.data && e.data.parent != null) {
-                const category = e.data.parent;
-                const distributionType = category.weightDistributionType;
-                if (distributionType == 1) {
+            if (e.data) {
+                console.log(e.data);
+                if ("parent" in e.data && e.data.parent != null) {
+                    const category = e.data.parent;
+                    console.log(category);
                     calculateWeights(category);
 
-                } else if (distributionType == 0) {
-                    // weighted individually
-                    console.log('weighted individually');
-                    console.log(e);
-
-
-
+                    e.api.redrawRows();
+                    //generatePinnedBottomData(parentGrid);
                 } else {
-                    // regular by points
-                    console.log('regular by points');
-                    console.log(e);
+                    // Calculate aggregation row
+                    e.data.weightedValue = e.newValue * e.data.weight / 100;
+                    //console.log(e.data.weightedValue);
 
-                    let total = 0;
-                    for (const item of category.gradeItems) {
-                        total += item.value!;
-                    }
+                    e.api.redrawRows({ rowNodes: [e.node as IRowNode<Category | GradeItem>] });
 
-                    category.value = total;
                 }
 
-
                 generatePinnedBottomData(parentGrid);
-            } else {
-                // Calculate aggregation row
-                generatePinnedBottomData(e.api);
             }
         }
     },
@@ -121,7 +111,11 @@ const columnDefsWeighted: ColDef<GradeItem | Category>[] = [
         },
         valueGetter: p => {
             if (p.data) {
-                return p.data.weight;
+                if ("actualWeight" in p.data) {
+                    return p.data.actualWeight;
+                } else {
+                    return p.data.weight;
+                }
 
             }
         },
@@ -142,10 +136,7 @@ const columnDefsWeighted: ColDef<GradeItem | Category>[] = [
         width: 200,
         valueGetter: p => {
             if (p.data && p.data.name === 'Class Grade') {
-                console.log('calculating: ');
-                console.log(p.data);
-                let total = p.data.value !== null ? p.data.value/p.data.maxValue*100.0 : 0;
-                console.log(total);
+                let total = p.data.value !== null ? p.data.value / p.data.maxValue * 100.0 : 0;
                 return total;
             }
             if (p.data) {
@@ -154,18 +145,30 @@ const columnDefsWeighted: ColDef<GradeItem | Category>[] = [
                 return "";
         },
         valueFormatter: p => {
-            console.log(p);
-            if (p.data && p.data.name === 'Class Grade') {
-                return p.value !== null ? (Math.round(p.value * 10) / 10).toString() + '%' : '0%';
-            } else {
-                if (p.data) {
-                    return p.value ? (Math.round(p.value * 10) / 10).toString() : '0%';
+            if (p.data) {
+
+                if (p.data.name === 'Class Grade') {
+                    return p.value !== null ? (Math.round(p.value * 100) / 100).toString() + '%' : '0%';
                 } else {
-                    return '0%';
+                    if ("isDropped" in p.data && p.data.isDropped){
+                        return "dropped";
+                    }else{
+                        return p.value != null ? (Math.round(p.value * 100) / 100).toString() : '';
+                    }
                 }
+            } else {
+                return '0';
             }
+        },
+        cellStyle: p => {
+            if (p.data && "isDropped" in p.data && p.data.isDropped){
+                return {background: 'lightblue'};
+            }
+            return;
         }
     }
+
+
 ];
 
 const columnDefsPoints: ColDef[] = [
@@ -191,6 +194,7 @@ const columnDefsPoints: ColDef[] = [
                 //button.innerHTML = "&#xf130";
                 button.onclick = () => {
                     p.data.isExpanded = !p.data.isExpanded;
+                    calculateWeights(p.data);
                     p.api.resetRowHeights();
                     p.api.redrawRows({ rowNodes: [p.node] });
                     generatePinnedBottomData(parentGrid);
@@ -220,7 +224,6 @@ const columnDefsPoints: ColDef[] = [
         onCellValueChanged: (e) => {
             // check if cell is inside a category... if so, change category total/percentage
 
-            console.log(e);
             if (e.data.parent != null) {
                 let parent = e.data.parent;
                 let total = 0;
@@ -304,7 +307,7 @@ export async function getAPIDataAsync() {
         };
 
 
-        let isPoints = false;
+        //let isPoints = false;
         let scheme;
         let gradeObjects;
         let categories;
@@ -320,7 +323,7 @@ export async function getAPIDataAsync() {
             const responseSetup = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/setup/");
             const setup = await responseSetup.json();
             isWeighted = setup.GradingSystem === "Weighted";
-            isPoints = setup.GradingSystem === "Points";
+            // isPoints = setup.GradingSystem === "Points";
 
             const responseScheme = await fetch(window.location.origin + "/d2l/api/le/1.67/" + orgUnitId + "/grades/schemes/");
             scheme = await responseScheme.json();
@@ -435,6 +438,7 @@ export async function getAPIDataAsync() {
             button.onclick = () => {
                 p.data.isExpanded = !p.data.isExpanded;
                 p.api.resetRowHeights();
+                calculateWeights(p.data);
                 p.api.redrawRows({ rowNodes: [p.node] });
                 generatePinnedBottomData(parentGrid);
             };
@@ -451,7 +455,7 @@ export async function getAPIDataAsync() {
             subGridDiv.classList.add('ag-theme-quartz');
             div.appendChild(subGridDiv);
 
-            const subGrid = createGrid(subGridDiv, createGridOptions(p.data.gradeItems));
+            createGrid(subGridDiv, createGridOptions(p.data.gradeItems));
 
             return div;
         }
@@ -473,23 +477,34 @@ export async function getAPIDataAsync() {
 // Function that aggregates the values from each row
 function calculatePinnedBottomData(grid: GridApi<Category | GradeItem>, target) {
     grid.forEachNodeAfterFilter((rowNode: IRowNode<Category | GradeItem>) => {
-        if (rowNode.data && rowNode.data.value) {
+
+        if (rowNode.data && rowNode.data.value != null) {
 
             if ("isExpanded" in rowNode.data && rowNode.data.isExpanded) {
+                let subValue = 0;
+                let subMaxValue = 0;
                 for (const gradeItem of rowNode.data.gradeItems) {
                     if (isWeighted) {
-                        target.value += gradeItem.weightedValue;
-                        target.maxValue += gradeItem.weight;
+                        subValue += gradeItem.weightedValue;
+                        subMaxValue += gradeItem.actualWeight;
                     } else {
                         if (gradeItem.value !== null)
-                            target.value += gradeItem.value;
-                        target.maxValue += gradeItem.maxValue;
+                            subValue += gradeItem.value;
+                        subMaxValue += gradeItem.maxValue;
                     }
+                }
+                if (isWeighted) {
+                    target.value += (subValue * rowNode.data.weight / 100);
+                    target.maxValue += (subMaxValue * rowNode.data.weight / 100);
+                } else {
+                    target.value += subValue;
+                    target.maxValue += subMaxValue;
                 }
             } else {
                 if (isWeighted) {
+                    console.log(rowNode.data)
                     target.value += rowNode.data.weightedValue;
-                        target.maxValue += rowNode.data.weight;
+                    target.maxValue += rowNode.data.weight;
                 } else {
                     if (rowNode.data.value !== null)
                         target.value += rowNode.data.value;
@@ -497,7 +512,6 @@ function calculatePinnedBottomData(grid: GridApi<Category | GradeItem>, target) 
                 }
             }
         }
-        console.log(target);
     });
 
     return target;
